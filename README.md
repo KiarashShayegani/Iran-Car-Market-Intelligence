@@ -2,10 +2,10 @@
 
 **An ML-powered car price estimation system for Iran's automotive market, featuring data scraping, model training, and deployment to provide intelligent price predictions beyond basic database queries.**
 
-[![Live Demo](https://img.shields.io/badge/🤗-Live%20Demo-blue)](https://huggingface.co/spaces/kiarash2077/pride_car_price_estimator)
+[![Live Demo](https://img.shields.io/badge/🤗-Live%20Demo-orange)](https://huggingface.co/spaces/kiarash2077/pride_car_price_estimator)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-brightgreen)](https://www.python.org/downloads/)
-[![Project Status](https://img.shields.io/badge/Status-MVP%20Complete-success)](https://github.com/KiarashShayegani/iranian-car-market-intelligence)
+[![Version](https://img.shields.io/badge/status-v0.1_MVP-blue)](https://github.com/KiarashShayegani/iranian-car-market-intelligence)
 
 ## 📖 Project Origin
 
