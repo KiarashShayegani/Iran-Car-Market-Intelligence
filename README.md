@@ -87,13 +87,13 @@ iranian-car-market-intelligence/
 │   └── Modeling.ipynb 
 │
 ├── models/                       # Trained models and artifacts
-│   └── v1/                       # Version 1 models
+│   └── v0.1/                       # MVP
 │       ├── random_forest_model.pkl
 │       ├── input_scaler.pkl
 │       ├── model_metadata.json
 │       └── feature_importance.csv
 │
-├── assets/                       # Trained models and artifacts
+├── assets/                       # Artifacts, images, diagrams or screenshots
 │
 ├── PROJECT_VISION.md             # Detailed project background and vision
 ├── ROADMAP.md                    # Future development plans
@@ -111,7 +111,7 @@ cd iranian-car-market-intelligence
 pip install -r src/web-app/requirements.txt
 
 # Run the web app locally
-python src/web-app/gradio_app.py
+python src/web-app/app.py
 ```
 
 ## 🤝 Contributing
