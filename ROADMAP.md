@@ -5,7 +5,7 @@
 - **v1.x** → Major expansion: More Iranian car brands
 - **v2.x** → Advanced analytics dashboard & market insights
 
-##### 📍 Latest Version: **v0.1** (Pride Cars Only) – [Try the Live App](https://huggingface.co/spaces/kiarash2077/pride_car_price_estimator)
+##### 📍 Latest Version: **v0.1** – [Try the Live App](https://huggingface.co/spaces/kiarash2077/pride_car_price_estimator)
 
 ---
 
@@ -20,7 +20,6 @@
 - [ ] Enhanced web app interface (better Persian UX)
 - [ ] Improved error handling and validation
 - [ ] Performance optimizations for faster predictions
-- [ ] Mobile responsiveness improvements
 
 ### v0.3 - Data Quality
 - [ ] Multi-source data collection (additional websites)
