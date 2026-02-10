@@ -11,7 +11,7 @@
 
 > *"When navigating Iran's volatile car market, both buyers and sellers face a common challenge: determining a fair price for a vehicle. Existing platforms often rely on simple database queries that return minimum, maximum, and average prices—useful, but potentially missing complex patterns and vulnerable to outliers.*
 >
->*This project began with a question: Could machine learning provide more nuanced price estimations by learning from actual market data? Starting with Pride cars (Iran's most common vehicle), I built a complete pipeline—from data collection to deployment—to explore whether ML models could offer a complementary approach to traditional price estimation methods."* //more explanations to be added * * * 
+>*This project began with a question: Could machine learning provide more nuanced price estimations by learning from actual market data? Starting with Pride cars (Iran's most common vehicle), I built a complete pipeline—from data collection to deployment—to explore whether ML models could offer a complementary approach to traditional price estimation methods."*
 
 ## 🔍 What This Project Is
 
@@ -76,11 +76,15 @@ iranian-car-market-intelligence/
 ├── src/                          # Source code
 │   ├── data_pipeline/            # Scraping, cleaning, database operations
 │   ├── ml/                       # Model training and evaluation
-│   └── app/                      # Web application (Gradio)
+│   └── web-app/                  # Web application (Gradio)
 │
 ├── notebooks/                    # Jupyter notebooks for experimentation
-│   ├── exploration.ipynb         # Initial EDA and data analysis
-│   └── modeling_experiments.ipynb # Model development and comparison
+│   ├── WebScraper.ipynb
+│   ├── Dataset_cleaning.ipynb
+│   ├── MySQL_DB_Connector.ipynb
+│   ├── DataPrep.ipynb
+│   ├── EDA.ipynb       
+│   └── Modeling.ipynb 
 │
 ├── models/                       # Trained models and artifacts
 │   └── v1/                       # Version 1 models
@@ -89,43 +93,26 @@ iranian-car-market-intelligence/
 │       ├── model_metadata.json
 │       └── feature_importance.csv
 │
-├── docs/                         # Documentation
-│   ├── methodology.md            # Technical methodology
-│   ├── api.md                    # API documentation (future)
-│   └── deployment.md             # Deployment guides
+├── assets/                       # Trained models and artifacts
 │
 ├── PROJECT_VISION.md             # Detailed project background and vision
 ├── ROADMAP.md                    # Future development plans
-├── CHANGELOG.md                  # Version history
-└── requirements.txt              # Python dependencies
+└── CHANGELOG.md                  # Version history
+
 ```
 
-## 🛠️ Quick Start
-
-### Prerequisites
-- Python 3.8+
-- MySQL (for full pipeline)
-- Git
-
-### Installation
+### Run Web-App Locally
 ```bash
 # Clone the repository
 git clone https://github.com/KiarashShayegani/iranian-car-market-intelligence.git
 cd iranian-car-market-intelligence
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -r src/web-app/requirements.txt
 
 # Run the web app locally
-python src/app/gradio_app.py
+python src/web-app/gradio_app.py
 ```
-
-### Run the Complete Pipeline
-1. **Data Collection**: `python src/data_pipeline/scraper.py`
-2. **Data Cleaning**: `python src/data_pipeline/cleaner.py`
-3. **Database Setup**: `python src/data_pipeline/database.py`
-4. **Model Training**: `python src/ml/trainer.py`
-5. **Launch App**: `python src/app/gradio_app.py`
 
 ## 🤝 Contributing
 
@@ -136,13 +123,6 @@ This project welcomes contributions! Whether you're interested in:
 - Optimizing the data pipeline
 
 Please feel free to open issues or submit pull requests.
-
-## ⚠️ Important Notes
-
-- **Data Source**: This project uses publicly available data from bama.ir for educational purposes
-- **Scope Limitation**: Currently only supports Pride cars as an MVP
-- **Market Specificity**: Designed specifically for Iran's unique automotive market conditions
-- **Educational Purpose**: Primarily a demonstration of ML pipeline building for real-world problems
 
 ## 📄 License
 
