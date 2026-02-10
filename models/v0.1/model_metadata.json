@@ -1,0 +1,48 @@
+{
+  "model_type": "RandomForestRegressor",
+  "model_name": "Random Forest",
+  "performance": {
+    "r2_score": 0.8312354837079041,
+    "mae": 44770307.018459156,
+    "mae_million_toman": 44.77030701845916,
+    "rmse": 63843740.864859715
+  },
+  "training_info": {
+    "training_date": "2026-01-31 23:32:51",
+    "training_samples": 423,
+    "test_samples": 106,
+    "feature_count": 7
+  },
+  "features": {
+    "column_names": [
+      "name",
+      "trim",
+      "mileage",
+      "fuel",
+      "transmission",
+      "body_status",
+      "age"
+    ],
+    "column_order": [
+      "name",
+      "trim",
+      "mileage",
+      "fuel",
+      "transmission",
+      "body_status",
+      "age"
+    ]
+  },
+  "target": {
+    "name": "price",
+    "average_value": 416520330.96926713,
+    "range": [
+      100000000.0,
+      830000000.0
+    ]
+  },
+  "model_parameters": {
+    "n_estimators": 100,
+    "random_state": 42
+  }
+}
