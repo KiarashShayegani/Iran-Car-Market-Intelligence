@@ -127,42 +127,6 @@ python src/app/gradio_app.py
 4. **Model Training**: `python src/ml/trainer.py`
 5. **Launch App**: `python src/app/gradio_app.py`
 
-## 🎯 Current Status & Roadmap
-
-### ✅ MVP Complete
-- [x] Pride car data pipeline (scraping → cleaning → database)
-- [x] Four ML models trained and evaluated
-- [x] Gradio web interface deployed
-- [x] Complete documentation
-
-### 🔄 In Development
-- [ ] Expand to additional Iranian car brands (Peugeot, Samand, etc.)
-- [ ] Implement real-time data updates
-- [ ] Add FastAPI backend for production use
-- [ ] Create mobile-friendly interface
-
-### 📋 Planned Features
-- [ ] Multi-brand price estimation
-- [ ] Historical price trends visualization
-- [ ] Regional price variations (by Iranian city)
-- [ ] API for third-party integration
-- [ ] Docker containerization
-
-## 🧪 Methodology Details
-
-### Data Processing Highlights
-- **Persian Text Handling**: Full support for UTF-8 and Persian character processing
-- **Mileage Imputation**: Intelligent handling of "کارکرده" (used) vehicles using year-based grouping
-- **Custom Encoding**: Domain-specific ordinal encoding for Iranian car features
-- **Outlier Management**: IQR-based outlier detection and handling
-
-### Model Selection Rationale
-The Random Forest model was selected for deployment due to:
-1. **Best performance** on test data (R² = 0.872)
-2. **Feature importance** insights for interpretability
-3. **Robustness** to outliers and noise in real-world data
-4. **Reasonable training time** for potential periodic retraining
-
 ## 🤝 Contributing
 
 This project welcomes contributions! Whether you're interested in:
@@ -171,7 +135,7 @@ This project welcomes contributions! Whether you're interested in:
 - Enhancing the web interface
 - Optimizing the data pipeline
 
-Please check the [Contributing Guidelines](CONTRIBUTING.md) and feel free to open issues or submit pull requests.
+Please feel free to open issues or submit pull requests.
 
 ## ⚠️ Important Notes
 
