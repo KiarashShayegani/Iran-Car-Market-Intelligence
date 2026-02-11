@@ -25,12 +25,7 @@
 
 The system follows a structured pipeline:
 
-```
-📊 Data Collection → 🧹 Data Processing → 🧠 Model Training → 🚀 Deployment
-      ↓                     ↓                     ↓                ↓
-  Web Scraping        Cleaning &         4 ML Algorithms    Gradio Web App
-  (bama.ir API)       Encoding           with Comparison    on Hugging Face
-```
+![Project Overview](assets/ICMI.png)
 
 ## 📈 Technical Implementation
 
@@ -67,52 +62,11 @@ Try the interactive price estimator:
 - **Live App**: [Pride Car Price Estimator on Hugging Face](https://huggingface.co/spaces/kiarash2077/pride_car_price_estimator)
 - **Current Scope**: Pride cars (Saipa) only
 - **Features**: All input parameters with Persian interface support
+> *Screenshot of Web Application GUI*
 
-## 📂 Repository Structure
+> ![GUI Preview](assets/GUI_screenshot_1.png)
 
-```
-iranian-car-market-intelligence/
-│
-├── src/                          # Source code
-│   ├── data_pipeline/            # Scraping, cleaning, database operations
-│   ├── ml/                       # Model training and evaluation
-│   └── web-app/                  # Web application (Gradio)
-│
-├── notebooks/                    # Jupyter notebooks for experimentation
-│   ├── WebScraper.ipynb
-│   ├── Dataset_cleaning.ipynb
-│   ├── MySQL_DB_Connector.ipynb
-│   ├── DataPrep.ipynb
-│   ├── EDA.ipynb       
-│   └── Modeling.ipynb 
-│
-├── models/                       # Trained models and artifacts
-│   └── v0.1/                       # MVP
-│       ├── random_forest_model.pkl
-│       ├── input_scaler.pkl
-│       ├── model_metadata.json
-│       └── feature_importance.csv
-│
-├── assets/                       # Artifacts, images, diagrams or screenshots
-│
-├── PROJECT_VISION.md             # Detailed project background and vision
-├── ROADMAP.md                    # Future development plans
-└── CHANGELOG.md                  # Version history
-
-```
-
-### Run Web-App Locally
-```bash
-# Clone the repository
-git clone https://github.com/KiarashShayegani/iranian-car-market-intelligence.git
-cd iranian-car-market-intelligence
-
-# Install dependencies
-pip install -r src/web-app/requirements.txt
-
-# Run the web app locally
-python src/web-app/app.py
-```
+---
 
 ## 🤝 Contributing
 
