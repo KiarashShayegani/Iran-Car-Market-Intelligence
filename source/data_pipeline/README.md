@@ -12,7 +12,7 @@ Bama.ir is a **dynamic React app** and uses cliend-side rendering. Traditional s
 
 While inspecting page activity, a request to `/api/ads?page=1` appeared—returning **clean JSON** with 20+ ads per response.
 
-![XHR Filter Screenshot](../../../assets/data_fetching_1.png)
+![XHR Filter Screenshot](../../assets/data_fetching_1.png)
 
 ![API Endpoint Screenshot](../../assets/data_fetching_2.png)
 
