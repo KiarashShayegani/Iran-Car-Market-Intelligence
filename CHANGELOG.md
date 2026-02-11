@@ -6,13 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-#### [v0.2] - 2026-12-2
-##### Minimal repo commits
-- **Added**
-  - System architecture diagram
-  - GUI screenshots
-  - Additional README.md for folders
-  - URL and tiny text fixes
+> ### [v0.2] - 2026-12-2
+> #### Minimal repo commits
+> **Added:**
+>  - System architecture diagram
+>  - GUI screenshots
+>  - Additional README.md for folders
+>  - URL and tiny text fixes
 
 ---
 
