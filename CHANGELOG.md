@@ -1,8 +1,18 @@
 # Changelog
 
-All notable changes to the Iranian Car Market Intelligence project will be documented in this file.
+All notable changes to the Iran Car Market Intelligence project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+#### [v0.2] - 2026-12-2
+##### Minimal repo commits
+- **Added**
+  - System architecture diagram
+  - GUI screenshots
+  - Additional README.md for folders
+  - URL and tiny text fixes
 
 ---
 
@@ -51,7 +61,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **MVP**: Initial proof-of-concept with Pride cars only
 - **v0.x**: Development versions with incremental features
 - **v1.x**: First stable release with multiple Iranian car brands
-- **v2.x**: Major feature releases and market expansions
+- **v2.x**: Major feature releases and market analysis dashboard
 
 ---
 
