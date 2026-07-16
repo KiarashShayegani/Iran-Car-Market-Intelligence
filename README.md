@@ -90,4 +90,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Disclaimer**: This is an educational project demonstrating ML pipeline development. Price estimations should be verified with multiple sources for real purchase/sale decisions.
+**Disclaimer**: This is an eperimental project demonstrating ML pipeline development. Price estimations should be verified with multiple sources for real purchase/sale decisions.
