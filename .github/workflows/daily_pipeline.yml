@@ -1,0 +1,60 @@
+# ICMI v2.0 - GitHub Actions Workflow
+# Automatically runs the full pipeline daily at 6:00 AM Tehran time.
+#
+# What this does:
+#   1. Checks out your repository
+#   2. Sets up Python 3.11
+#   3. Installs dependencies from requirements.txt
+#   4. Runs the full pipeline (scrape → clean → train)
+#   5. Commits updated data and model artifacts back to the repo
+#
+# NOTE: GitHub Actions has a 2,000-minute free tier per month.
+# This workflow takes ~5-10 minutes per run, well within limits.
+
+name: ICMI Daily Pipeline
+
+on:
+  schedule:
+    # 2:00 AM UTC = 6:30 AM Tehran (UTC+3:30) during standard time
+    # 2:00 AM UTC = 5:30 AM Tehran (UTC+3:30) during daylight saving
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
+
+jobs:
+  scrape-train:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run full pipeline
+        run: python run_pipeline.py
+        continue-on-error: false
+
+      - name: Commit updated data and artifacts
+        run: |
+          git config --local user.email "icmi-bot@users.noreply.github.com"
+          git config --local user.name "ICMI Bot"
+
+          git add data/ artifacts/
+          git diff --staged --quiet || git commit -m "🤖 Daily update: $(date +%Y-%m-%d)"
+          git push

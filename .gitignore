@@ -1,1 +1,54 @@
-repo_token.txt
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Logs
+logs/
+*.log
+
+# Data files (raw scrapes can be large)
+data/raw/*.parquet
+data/processed/*.parquet
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Database
+data/*.db
+*.db
+
+# Artifacts (models, scalers — use Git LFS if >100MB)
+artifacts/models/*.cbm
+artifacts/scalers/*.pkl
+artifacts/metadata/*.json
+artifacts/metadata/*.joblib
+
+# Keep directory structure
+!artifacts/models/.gitkeep
+!artifacts/scalers/.gitkeep
+!artifacts/metadata/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Environment
+.env
+.env.local
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/

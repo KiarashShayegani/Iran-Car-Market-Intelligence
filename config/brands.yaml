@@ -1,0 +1,142 @@
+# ICMI v2.0 - Brand & Pipeline Configuration
+# All supported brands for the Iranian car market.
+
+scraping:
+  source: "bama.ir"
+  base_url: "https://bama.ir/cad/api/search"
+  request_timeout: 30
+  max_retries: 3
+  retry_delay: 2
+  rate_limit_delay: 1.5
+  user_agent: "ICMI-Bot/2.0"
+  max_pages_per_brand: 50
+  consecutive_empty_threshold: 3
+
+brands:
+  pride:
+    slug: "pride"
+    name_fa: "پراید"
+    manufacturer: "saipa"
+    category: "economy"
+    enabled: true
+  peugeot:
+    slug: "peugeot"
+    name_fa: "پژو"
+    manufacturer: "ikco"
+    category: "sedan"
+    enabled: true
+  tara:
+    slug: "tara"
+    name_fa: "تارا"
+    manufacturer: "ikco"
+    category: "sedan"
+    enabled: true
+  shahin:
+    slug: "shahin"
+    name_fa: "شاهین"
+    manufacturer: "saipa"
+    category: "sedan"
+    enabled: true
+  fownix:
+    slug: "fownix"
+    name_fa: "فونیکس"
+    manufacturer: "fownix"
+    category: "suv"
+    enabled: true
+  reera:
+    slug: "reera"
+    name_fa: "ریرا"
+    manufacturer: "reera"
+    category: "sedan"
+    enabled: true
+  quick:
+    slug: "quick"
+    name_fa: "کوئیک"
+    manufacturer: "saipa"
+    category: "economy"
+    enabled: true
+  saina:
+    slug: "saina"
+    name_fa: "ساینا"
+    manufacturer: "saipa"
+    category: "sedan"
+    enabled: true
+  dena:
+    slug: "dena"
+    name_fa: "دنا"
+    manufacturer: "ikco"
+    category: "sedan"
+    enabled: true
+  lucano:
+    slug: "lucano"
+    name_fa: "لوکانو"
+    manufacturer: "lucano"
+    category: "sedan"
+    enabled: true
+  toyota:
+    slug: "toyota"
+    name_fa: "تویوتا"
+    manufacturer: "imported"
+    category: "suv"
+    enabled: true
+  lamari:
+    slug: "lamari"
+    name_fa: "لاماری"
+    manufacturer: "lamari"
+    category: "sedan"
+    enabled: true
+  kia:
+    slug: "kia"
+    name_fa: "کیا"
+    manufacturer: "imported"
+    category: "suv"
+    enabled: true
+  kmc:
+    slug: "kmc"
+    name_fa: "کیاموتورز"
+    manufacturer: "imported"
+    category: "suv"
+    enabled: true
+
+features:
+  categorical:
+    - brand_slug
+    - name
+    - trim
+    - fuel
+    - transmission
+    - body_status
+  numerical:
+    - year
+    - mileage
+    - mileage_unknown
+    - body_status_ordinal
+    - age
+  target: price
+
+body_status_hierarchy:
+  "اتاق تعویض": 1
+  "درب تعویض": 2
+  "گلگیر تعویض": 3
+  "کاپوت تعویض": 4
+  "کامل رنگ": 5
+  "صافکاری بدون رنگ": 6
+  "دور رنگ": 7
+  "گلگیر رنگ": 8
+  "کاپوت رنگ": 9
+  "دو درب رنگ": 10
+  "یک درب رنگ": 11
+  "چند لکه رنگ": 12
+  "دو لکه رنگ": 13
+  "یک لکه رنگ": 14
+  "بدون رنگ": 15
+
+fuel_mapping:
+  "بنزینی": "petrol"
+  "دوگانه سوز": "cng_petrol"
+  "پلاگین هیبرید": "plugin_hybrid"
+  "برقی": "electric"
+
+transmission_mapping:
+  "دنده ای": "manual"
+  "اتوماتیک": "automatic"
