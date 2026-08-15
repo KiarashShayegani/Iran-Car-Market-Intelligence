@@ -17,11 +17,7 @@ ENV/
 *.swo
 *~
 
-# new -------------------
-catboost_info/
-data/
-artifacts/
-# -----------------------
+
 
 # OS files
 .DS_Store
@@ -69,3 +65,10 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+
+# new -------------------
+catboost_info/
+data/
+artifacts/
+# -----------------------
+
