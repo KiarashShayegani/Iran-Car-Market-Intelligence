@@ -14,6 +14,8 @@ validates them, trains a best-of-four ML model (CatBoost / XGBoost / RandomFores
 **Status: active development (v2.0.x).** This is a working end-to-end pipeline, not yet
 the final product — see [ROADMAP.md](ROADMAP.md) for where it's headed.
 
+> [!Checkout live demo on HuggingFace now](https://huggingface.co/spaces/kiarash2077/Iran_Car_Market_Intelligence)
+
 ---
 
 ## 📸 Screenshots
