@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "Kiarash Shayegani", email = "your.email@example.com"}
+    {name = "Kiarash Shayegani", email = "kiarash.shayegani.st@gmail.com"}
 ]
 keywords = [
     "iran", "car", "market", "price-prediction", "machine-learning",
