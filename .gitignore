@@ -17,6 +17,7 @@ ENV/
 *.swo
 *~
 
+
 # OS files
 .DS_Store
 Thumbs.db
@@ -63,3 +64,10 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+
+
+# temporary NEW ---------
+catboost_info/
+data/
+artifacts/
+# -----------------------

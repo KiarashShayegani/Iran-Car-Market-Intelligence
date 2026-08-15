@@ -1,4 +1,4 @@
-# ICMI v2.0 - Iran Car Market Intelligence
+# ICMI v2.0.1 : First full completion of pipeline(local)!
 # Python 3.10+ required
 # Install: pip install -r requirements.txt
 
