@@ -16,6 +16,8 @@ ENV/
 *.swp
 *.swo
 *~
+catboost_info/
+data/
 
 # OS files
 .DS_Store
