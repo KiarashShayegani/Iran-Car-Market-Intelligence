@@ -18,6 +18,7 @@ ENV/
 *~
 
 
+
 # OS files
 .DS_Store
 Thumbs.db
@@ -67,6 +68,9 @@ dist/
 
 
 # temporary NEW ---------
+=======
+# new -------------------
+>>>>>>> d9f72d025a66a913886bf686959642caad82cfe7
 catboost_info/
 data/
 artifacts/
