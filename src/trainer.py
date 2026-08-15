@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import joblib
+import numpy as np
 import pandas as pd
 import yaml
 from catboost import CatBoostRegressor
@@ -25,7 +26,7 @@ from loguru import logger
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
-from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.model_selection import KFold, train_test_split
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -193,7 +194,24 @@ def evaluate_candidates(
             mae = mean_absolute_error(y_test, y_pred)
             r2 = r2_score(y_test, y_pred)
 
-            cv_scores = cross_val_score(pipeline, X, y, cv=n_splits, scoring="r2")
+            # Manual K-fold instead of sklearn's cross_val_score: the
+            # latter calls clone() on the estimator, and CatBoost's
+            # cat_features constructor param breaks sklearn's clone
+            # contract (get_params() doesn't round-trip cleanly), which
+            # silently drops CatBoost from every comparison. Refitting
+            # the same pipeline instance per fold sidesteps clone()
+            # entirely and works identically for every candidate.
+            kfold = KFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+            fold_scores = []
+            for train_idx, val_idx in kfold.split(X):
+                pipeline.fit(X.iloc[train_idx], y.iloc[train_idx])
+                fold_pred = pipeline.predict(X.iloc[val_idx])
+                fold_scores.append(r2_score(y.iloc[val_idx], fold_pred))
+            cv_scores = np.array(fold_scores)
+
+            # Re-fit on the holdout train split so the saved pipeline
+            # matches the test_mae/test_r2 reported above.
+            pipeline.fit(X_train, y_train)
 
             comparison[name] = {
                 "test_mae": float(mae),

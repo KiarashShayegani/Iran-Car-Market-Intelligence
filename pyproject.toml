@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "Kiarash Shayegani", email = "kiarash.shayegani.st@gmail.com"}
+    {name = "Kiarash Shayegani", email = "your.email@example.com"}
 ]
 keywords = [
     "iran", "car", "market", "price-prediction", "machine-learning",
@@ -54,9 +54,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/KiarashShayegani/Iran-Car-Market-Intelligence"
-Repository = "https://github.com/KiarashShayegani/Iran-Car-Market-Intelligence"
-Issues = "https://github.com/KiarashShayegani/Iran-Car-Market-Intelligence/issues"
+Homepage = "https://github.com/KiarashShayegani/ICMI"
+Repository = "https://github.com/KiarashShayegani/ICMI"
+Issues = "https://github.com/KiarashShayegani/ICMI/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

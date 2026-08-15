@@ -70,6 +70,7 @@ class BamaScraper:
         self.records: List[Dict] = []
         self.errors: List[Dict] = []
         self.skip_reasons: Counter = Counter()
+        self.skipped_records: List[Dict] = []
         self.logger = logger.bind(brand=brand_slug)
 
         self.logger.info(
@@ -142,6 +143,38 @@ class BamaScraper:
 
         return None
 
+    def _record_skip(self, item: Dict, reason: str) -> None:
+        """
+        Capture enough raw context on a skipped ad to diagnose patterns
+        later, without keeping the whole payload. Written to
+        data/skipped_rows.csv at the end of scrape().
+        """
+        detail = (item.get("detail") or {}) if isinstance(item, dict) else {}
+        price_data = (item.get("price") or {}) if isinstance(item, dict) else {}
+        self.skipped_records.append(
+            {
+                "brand_slug": self.brand_slug,
+                "reason": reason,
+                "title_raw": detail.get("title", ""),
+                "year_raw": detail.get("year", ""),
+                "price_raw": price_data.get("price", ""),
+                "mileage_raw": detail.get("mileage", ""),
+                "code": detail.get("code", ""),
+                "scraped_at": datetime.now().isoformat(),
+            }
+        )
+
+    def _save_skipped_rows(self, path: str = "data/skipped_rows.csv") -> None:
+        """Append this brand's skipped ads to the shared diagnostics CSV."""
+        if not self.skipped_records:
+            return
+        df = pd.DataFrame(self.skipped_records)
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        write_header = not p.exists()
+        df.to_csv(p, mode="a", header=write_header, index=False, encoding="utf-8-sig")
+        self.logger.info("Logged {} skipped rows -> {}", len(df), path)
+
     def _parse_ad(self, item: Dict) -> Optional[Dict]:
         """
         Extract structured data from a single ad item.
@@ -156,15 +189,23 @@ class BamaScraper:
             Parsed record dict or None if invalid.
         """
         try:
-            if item.get("type") != "ad":
+            if not isinstance(item, dict) or item.get("type") != "ad":
                 self.skip_reasons["not_ad_item"] += 1
+                self._record_skip(item, "not_ad_item")
                 return None
 
-            detail = item.get("detail", {})
-            price_data = item.get("price", {})
+            # Use `or {}` rather than `.get(key, {})`: bama.ir sometimes
+            # sends `"detail": null` / `"price": null` explicitly (not a
+            # missing key), and `.get(key, default)` only falls back to
+            # `default` when the key is MISSING - not when it's present
+            # with value None. That mismatch caused an unguarded
+            # 'NoneType' object has no attribute 'get' crash that killed
+            # the whole scrape (not just one ad) before this fix.
+            detail = item.get("detail") or {}
+            price_data = item.get("price") or {}
 
             # --- Extract title ---
-            title_raw = detail.get("title", "")
+            title_raw = detail.get("title") or ""
             title_parts = [p.strip() for p in title_raw.split("،")]
 
             if len(title_parts) >= 2:
@@ -175,7 +216,7 @@ class BamaScraper:
                 car_model = title_parts[0] if title_parts else "unknown"
 
             # --- Parse mileage ---
-            raw_mileage = detail.get("mileage", "کارکرده")
+            raw_mileage = detail.get("mileage") or "کارکرده"
             mileage_unknown = False
 
             if raw_mileage == "صفر کیلومتر":
@@ -190,9 +231,10 @@ class BamaScraper:
                     mileage_unknown = True
 
             # --- Parse price ---
-            price_str = price_data.get("price", "0")
+            price_str = price_data.get("price") or "0"
             if not price_str or str(price_str).strip() == "":
                 self.skip_reasons["no_price_negotiable"] += 1
+                self._record_skip(item, "no_price_negotiable")
                 return None
 
             price_clean = str(price_str).replace(",", "").strip()
@@ -201,12 +243,14 @@ class BamaScraper:
             # CRITICAL: Skip zero-price listings (توافقی / corrupted)
             if price == 0:
                 self.skip_reasons["zero_price"] += 1
+                self._record_skip(item, "zero_price")
                 return None
 
             # --- Parse year (Shamsi or Gregorian, normalized) ---
-            year = self._normalize_year(detail.get("year", "0"))
+            year = self._normalize_year(detail.get("year") or "0")
             if year is None:
                 self.skip_reasons["invalid_year"] += 1
+                self._record_skip(item, "invalid_year")
                 return None
 
             # Generate deterministic ID for deduplication
@@ -236,12 +280,13 @@ class BamaScraper:
 
             return record
 
-        except (KeyError, ValueError, IndexError, TypeError) as e:
+        except (KeyError, ValueError, IndexError, TypeError, AttributeError) as e:
             self.skip_reasons["parse_error"] += 1
+            self._record_skip(item, "parse_error")
             self.logger.warning(
-                "Parse error: {} | item_keys: {}", e, list(item.keys())
+                "Parse error: {} | item_keys: {}", e, list(item.keys()) if isinstance(item, dict) else "N/A"
             )
-            self.errors.append({"error": str(e), "item_keys": list(item.keys())})
+            self.errors.append({"error": str(e)})
             return None
 
     def scrape(self, max_pages: Optional[int] = None) -> pd.DataFrame:
@@ -316,6 +361,7 @@ class BamaScraper:
             self.logger.info(
                 "Skip reasons for '{}': {}", self.brand_slug, dict(self.skip_reasons)
             )
+        self._save_skipped_rows()
 
         if df.empty:
             self.logger.warning("No records scraped for {}", self.brand_slug)

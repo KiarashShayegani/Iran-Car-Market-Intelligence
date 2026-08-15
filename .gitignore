@@ -17,8 +17,6 @@ ENV/
 *.swo
 *~
 
-
-
 # OS files
 .DS_Store
 Thumbs.db
@@ -27,26 +25,34 @@ Thumbs.db
 logs/
 *.log
 
-# Data files (raw scrapes can be large)
+# Data files (raw scrapes/master history can be large)
 data/raw/*.parquet
 data/processed/*.parquet
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
+# Skipped-ads / dropped-row diagnostic logs (grow every run, regenerable)
+data/skipped_rows.csv
+data/validation_dropped_rows.csv
+
 # Database
 data/*.db
 *.db
 
-# Artifacts (models, scalers — use Git LFS if >100MB)
+# Artifacts (models, scalers - use Git LFS if a model exceeds ~10MB,
+# which GitHub/HF Spaces enforce without LFS)
+artifacts/models/*.joblib
 artifacts/models/*.cbm
 artifacts/scalers/*.pkl
 artifacts/metadata/*.json
-artifacts/metadata/*.joblib
 
 # Keep directory structure
 !artifacts/models/.gitkeep
 !artifacts/scalers/.gitkeep
 !artifacts/metadata/.gitkeep
+
+# CatBoost's own training-run scratch directory
+catboost_info/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -65,13 +71,3 @@ htmlcov/
 build/
 dist/
 *.egg-info/
-
-
-# temporary NEW ---------
-=======
-# new -------------------
->>>>>>> d9f72d025a66a913886bf686959642caad82cfe7
-catboost_info/
-data/
-artifacts/
-# -----------------------

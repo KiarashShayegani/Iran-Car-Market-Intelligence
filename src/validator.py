@@ -20,6 +20,7 @@ CHANGELOG (this patch):
     every column produced upstream.
 """
 
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import pandas as pd
@@ -123,6 +124,25 @@ def build_processed_schema(cfg: Optional[Dict[str, Any]] = None) -> DataFrameSch
     )
 
 
+def _save_dropped_rows(
+    df: pd.DataFrame, path: str = "data/validation_dropped_rows.csv"
+) -> None:
+    """
+    Append the actual dropped rows (with why they failed) to a shared
+    diagnostic CSV - the same philosophy as the scraper's
+    data/skipped_rows.csv, one stage downstream. Without this, a
+    message like "dropping 357 rows | reasons={isin(...): 357}" tells
+    you a fuel value was unexpected but not WHICH one.
+    """
+    if df.empty:
+        return
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not p.exists()
+    df.to_csv(p, mode="a", header=write_header, index=False, encoding="utf-8-sig")
+    logger.info("Logged {} dropped rows -> {}", len(df), path)
+
+
 def _validate_non_fatal(
     df: pd.DataFrame, schema: DataFrameSchema, label: str
 ) -> pd.DataFrame:
@@ -161,7 +181,23 @@ def _validate_non_fatal(
             reasons,
         )
 
-        cleaned = df.drop(index=[i for i in bad_indices if i in df.index])
+        present = [i for i in bad_indices if i in df.index]
+
+        # Save the actual offending rows (with which check they failed)
+        # so "357 rows failed a fuel check" becomes something you can
+        # actually open and read, not just a count.
+        reason_by_index = (
+            failures.dropna(subset=["index"])
+            .astype({"index": int})
+            .groupby("index")["check"]
+            .apply(lambda s: "; ".join(sorted(set(s.astype(str)))))
+        )
+        dropped_rows = df.loc[present].copy()
+        dropped_rows["validation_stage"] = label
+        dropped_rows["failed_check"] = dropped_rows.index.map(reason_by_index)
+        _save_dropped_rows(dropped_rows)
+
+        cleaned = df.drop(index=present)
         # Re-validate the cleaned frame - if it still fails, something
         # else is wrong and that should surface loudly, not be masked.
         return schema.validate(cleaned, lazy=True)
