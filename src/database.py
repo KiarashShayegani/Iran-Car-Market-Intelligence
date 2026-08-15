@@ -2,6 +2,16 @@
 Database abstraction layer.
 Uses SQLite locally (single file, zero setup).
 Also exports to CSV for easy inspection.
+
+CHANGELOG (this patch):
+  - upsert_listings() used to do `INSERT OR REPLACE INTO listings
+    SELECT * FROM temp_listings`, which silently assumes the incoming
+    dataframe has exactly the same columns, in the same order, as the
+    `listings` table (including the DB-managed `created_at` default).
+    It now builds an explicit, matched column list from the table's
+    actual schema (via PRAGMA table_info) intersected with whatever
+    columns are present in the dataframe, so it's correct regardless
+    of column order or a partially-different column set.
 """
 
 import sqlite3
@@ -95,12 +105,32 @@ class CarDatabase:
             raise ValueError(f"Missing required columns: {missing}")
 
         with self._get_connection() as conn:
-            # Use pandas to_sql with replace for upsert behavior
-            df.to_sql("temp_listings", conn, if_exists="replace", index=False)
+            # Build the write column list from the ACTUAL table schema,
+            # intersected with what the dataframe actually has. This
+            # keeps the insert correct even if `df` gains/loses columns
+            # or the table's column order changes - no positional
+            # `SELECT *` assumptions.
+            table_cols = [
+                row[1]
+                for row in conn.execute("PRAGMA table_info(listings)").fetchall()
+                if row[1] != "created_at"  # DB-managed default, never supplied by us
+            ]
+            available = [c for c in table_cols if c in df.columns]
+            missing_for_table = [c for c in table_cols if c not in df.columns]
+            if missing_for_table:
+                logger.warning(
+                    "Columns expected by 'listings' but absent from data "
+                    "(will be NULL): {}",
+                    missing_for_table,
+                )
 
-            conn.execute("""
-                INSERT OR REPLACE INTO listings
-                SELECT * FROM temp_listings
+            write_df = df[available].copy()
+            write_df.to_sql("temp_listings", conn, if_exists="replace", index=False)
+
+            col_list = ", ".join(available)
+            conn.execute(f"""
+                INSERT OR REPLACE INTO listings ({col_list})
+                SELECT {col_list} FROM temp_listings
                 WHERE listing_id IS NOT NULL
                   AND price > 0
                   AND year BETWEEN 1340 AND 1410

@@ -15,6 +15,11 @@ This script runs the full ICMI pipeline:
   5. Train a best-model-per-brand + one global fallback model
 
 All steps are logged to logs/ and console.
+
+CHANGELOG (this patch):
+  - Step 1 no longer hardcodes max_pages_per_brand=10. It was silently
+    overriding config/brands.yaml's max_pages_per_brand (50), capping
+    every brand at 10 pages regardless of what the config said.
 """
 
 import sys
@@ -41,7 +46,10 @@ def main() -> None:
     # Step 1: Scrape
     logger.info("STEP 1/4: Scraping data from bama.ir")
     scraper = MultiBrandScraper()
-    results = scraper.scrape_all(max_pages_per_brand=10)
+    # No max_pages_per_brand override here -> uses config/brands.yaml's
+    # max_pages_per_brand (50). Pass an explicit int only for quick
+    # local testing, e.g. scraper.scrape_all(max_pages_per_brand=2).
+    results = scraper.scrape_all()
 
     if not results:
         logger.error("No data scraped. Aborting pipeline.")

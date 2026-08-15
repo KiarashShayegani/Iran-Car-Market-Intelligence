@@ -1,6 +1,14 @@
 """
 Bama.ir scraper with comprehensive error handling, retry logic,
 deduplication, and per-record validation before accumulation.
+
+CHANGELOG (this patch):
+  - Added _normalize_year(): bama.ir reports `year` in Shamsi for most
+    domestic listings but in Gregorian for many `manufacturer: imported`
+    listings (confirmed via logs: toyota/kia were losing ~55-95% of
+    their ads to `invalid_year` before this fix). Gregorian years are
+    now converted to an approximate Shamsi year instead of being
+    dropped.
 """
 
 import hashlib
@@ -46,6 +54,11 @@ class BamaScraper:
         self.brand_slug = brand_slug
         self.brand_info = self.config["brands"].get(brand_slug, {})
         self.scrape_cfg = self.config["scraping"]
+
+        val_cfg = self.config.get("validation", {})
+        self.year_min = val_cfg.get("min_year", 1340)
+        self.year_max = val_cfg.get("max_year", 1410)
+        self.year_conversions = 0  # count of Gregorian->Shamsi conversions, for logging
 
         self.session = requests.Session()
         self.session.headers.update({
@@ -94,6 +107,40 @@ class BamaScraper:
         response = self.session.get(url, timeout=self.scrape_cfg["request_timeout"])
         response.raise_for_status()
         return response.json()
+
+    def _normalize_year(self, year_raw) -> Optional[int]:
+        """
+        Normalize a raw `year` field to Shamsi, handling bama.ir's mixed
+        calendar reporting.
+
+        Most domestic listings report Shamsi years directly (e.g. 1401).
+        Many `manufacturer: imported` listings (toyota, kia, kmc) instead
+        report the Gregorian year (e.g. 2015). Since only the year is
+        available (no month), converting via `year - 621` is a +/-1 year
+        approximation around Nowruz (~March 21) - acceptable for an `age`
+        feature, not something to treat as exact.
+
+        Args:
+            year_raw: Raw year value from the API (str or int).
+
+        Returns:
+            A Shamsi year within [year_min, year_max], or None if the
+            value can't be confidently placed in either calendar.
+        """
+        if not str(year_raw).isdigit():
+            return None
+        year = int(year_raw)
+
+        if self.year_min <= year <= self.year_max:
+            return year  # already a plausible Shamsi year
+
+        if 1900 <= year <= 2100:  # plausible Gregorian year
+            converted = year - 621
+            if self.year_min <= converted <= self.year_max:
+                self.year_conversions += 1
+                return converted
+
+        return None
 
     def _parse_ad(self, item: Dict) -> Optional[Dict]:
         """
@@ -156,12 +203,9 @@ class BamaScraper:
                 self.skip_reasons["zero_price"] += 1
                 return None
 
-            # --- Parse year ---
-            year_raw = detail.get("year", "0")
-            year = int(year_raw) if str(year_raw).isdigit() else 0
-
-            # Skip invalid years
-            if not (1340 <= year <= 1410):
+            # --- Parse year (Shamsi or Gregorian, normalized) ---
+            year = self._normalize_year(detail.get("year", "0"))
+            if year is None:
                 self.skip_reasons["invalid_year"] += 1
                 return None
 
@@ -260,6 +304,13 @@ class BamaScraper:
                 break
 
         df = pd.DataFrame(self.records)
+
+        if self.year_conversions:
+            self.logger.info(
+                "Converted {} Gregorian years -> Shamsi for '{}'",
+                self.year_conversions,
+                self.brand_slug,
+            )
 
         if self.skip_reasons:
             self.logger.info(
@@ -363,6 +414,7 @@ class MultiBrandScraper:
 
         Args:
             max_pages_per_brand: Limit pages per brand for testing.
+                None uses config/brands.yaml's `max_pages_per_brand`.
 
         Returns:
             Dictionary mapping brand_slug to DataFrame.
