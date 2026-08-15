@@ -1,9 +1,16 @@
 """
 ICMI v2.0 - Gradio Application
 Multi-tab interface for HF Spaces free tier deployment.
+
+Model loading: each brand may have its own best-performing model
+(artifacts/models/{brand}.joblib), chosen by src/trainer.py out of
+CatBoost/XGBoost/RandomForest/MLP. Brands without enough data fall
+back to one global model (artifacts/models/global.joblib) trained on
+every brand combined.
 """
 
 import json
+import sys
 from pathlib import Path
 
 import gradio as gr
@@ -11,8 +18,12 @@ import joblib
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from catboost import CatBoostRegressor
 from loguru import logger
+
+# Make `src` importable regardless of the current working directory
+# this script is launched from.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from src.trainer import FEATURES  # noqa: E402
 
 # --- Paths ---
 ARTIFACTS_DIR = Path("artifacts")
@@ -20,48 +31,49 @@ MODELS_DIR = ARTIFACTS_DIR / "models"
 META_DIR = ARTIFACTS_DIR / "metadata"
 PROCESSED_PATH = Path("data/processed/processed_latest.parquet")
 
+_MODEL_CACHE: dict = {}
 
-# --- Model Loading ---
-def load_model_artifacts():
-    """Load latest model and metadata from artifacts/."""
-    model_path = MODELS_DIR / "latest_model"
-    meta_path = META_DIR / "latest_metadata"
-    feat_path = META_DIR / "latest_features"
+
+def load_model_for_brand(brand: str):
+    """
+    Load the brand-specific model if one was trained, otherwise fall
+    back to the global model. Cached in-memory per key so repeated
+    predictions don't re-read from disk every click.
+    """
+    key = brand if (MODELS_DIR / f"{brand}.joblib").exists() else "global"
+
+    if key in _MODEL_CACHE:
+        return _MODEL_CACHE[key]
+
+    model_path = MODELS_DIR / f"{key}.joblib"
+    meta_path = META_DIR / f"{key}_metadata.json"
 
     if not model_path.exists():
-        raise RuntimeError("No trained model found. Run training first.")
+        raise RuntimeError("No trained model found. Run the pipeline first.")
 
-    model = CatBoostRegressor()
-    # Resolve symlink
-    actual_model = MODELS_DIR / model_path.readlink() if model_path.is_symlink() else model_path
-    model.load_model(str(actual_model))
-
-    actual_meta = META_DIR / meta_path.readlink() if meta_path.is_symlink() else meta_path
-    with open(actual_meta, "r", encoding="utf-8") as f:
+    pipeline = joblib.load(model_path)
+    with open(meta_path, "r", encoding="utf-8") as f:
         metadata = json.load(f)
 
-    actual_feat = META_DIR / feat_path.readlink() if feat_path.is_symlink() else feat_path
-    features = joblib.load(actual_feat)
-
-    return model, metadata, features
+    _MODEL_CACHE[key] = (pipeline, metadata, key)
+    return pipeline, metadata, key
 
 
-def load_market_data():
+def load_market_data() -> pd.DataFrame:
     """Load processed data for analytics."""
     if not PROCESSED_PATH.exists():
         return pd.DataFrame()
     return pd.read_parquet(PROCESSED_PATH)
 
 
-try:
-    model, metadata, feature_info = load_model_artifacts()
-    market_df = load_market_data()
-    MODEL_READY = True
-except Exception as e:
-    logger.error("Failed to load model: {}", e)
-    MODEL_READY = False
-    model, metadata, feature_info = None, {}, {}
-    market_df = pd.DataFrame()
+market_df = load_market_data()
+MODEL_READY = (MODELS_DIR / "global.joblib").exists()
+
+training_summary: dict = {}
+_summary_path = META_DIR / "training_summary.json"
+if _summary_path.exists():
+    with open(_summary_path, "r", encoding="utf-8") as f:
+        training_summary = json.load(f)
 
 
 # --- Price Prediction Logic ---
@@ -91,6 +103,11 @@ def predict_price(brand, name, trim, year, mileage, fuel, transmission, body_sta
             "⚠️ مدل آماده نیست. لطفاً ابتدا pipeline آموزش را اجرا کنید."
         )
 
+    try:
+        pipeline, metadata, used_key = load_model_for_brand(brand)
+    except Exception as e:
+        return gr.HTML(f"⚠️ خطا در بارگذاری مدل: {e}")
+
     age = 1404 - int(year)
     mileage_unknown = 1 if mileage is None or mileage == "" else 0
     mileage_val = float(mileage) if mileage not in (None, "") else 50000
@@ -115,7 +132,7 @@ def predict_price(brand, name, trim, year, mileage, fuel, transmission, body_sta
         ]
     )
 
-    pred = model.predict(input_df[feature_info["features"]])[0]
+    pred = pipeline.predict(input_df[FEATURES])[0]
 
     # Confidence interval from similar cars
     similar = market_df[
@@ -130,6 +147,12 @@ def predict_price(brand, name, trim, year, mileage, fuel, transmission, body_sta
     price_m = pred / 1e6
     ci_low_m = ci_low / 1e6
     ci_high_m = ci_high / 1e6
+
+    model_label = (
+        f"مدل اختصاصی برند ({metadata.get('best_model', '?')})"
+        if used_key == brand
+        else f"مدل عمومی fallback ({metadata.get('best_model', '?')})"
+    )
 
     html = f"""
     <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;
@@ -152,7 +175,8 @@ def predict_price(brand, name, trim, year, mileage, fuel, transmission, body_sta
             </p>
         </div>
         <p style="text-align: center; color: #6c757d; font-size: 12px;">
-            تعداد آگهی‌های مشابه در پایگاه داده: {len(similar)}
+            تعداد آگهی‌های مشابه در پایگاه داده: {len(similar)}<br/>
+            {model_label}
         </p>
     </div>
     """
@@ -349,28 +373,36 @@ with gr.Blocks(title="ICMI v2.0 - هوشمند بازار خودرو ایران"
 
     with gr.Tab("ℹ️ اطلاعات مدل"):
         if MODEL_READY:
+            global_info = training_summary.get("global", {})
+            brand_rows = training_summary.get("brands", {})
+
+            rows_html = "".join(
+                f"<tr><td>{b}</td><td>{info.get('best_model', '-')}</td>"
+                f"<td>{info.get('n_samples', '-')}</td>"
+                f"<td>{info.get('test_r2', '-')}</td></tr>"
+                for b, info in brand_rows.items()
+            )
+
             gr.Markdown(
                 f"""
-                **نوع مدل:** {metadata.get('model_type', 'N/A')}
+                **مدل عمومی (Fallback):** {global_info.get('best_model', 'N/A')}
+                | نمونه‌ها: {global_info.get('n_samples', 'N/A')}
+                | R² تست: {global_info.get('test_r2', 'N/A')}
 
-                **تاریخ آموزش:** {metadata.get('trained_at', 'N/A')}
+                **تاریخ آموزش:** {training_summary.get('trained_at', 'N/A')}
 
-                **تعداد نمونه آموزشی:**
-                {metadata.get('n_samples_train', 'N/A')}
-
-                **تعداد برندها:** {metadata.get('n_brands', 'N/A')}
-
-                **عملکرد:**
-                - R² (تست):
-                  {metadata.get('performance', {}).get('test_r2', 'N/A')}
-                - MAE (تست):
-                  {metadata.get('performance', {}).get('test_mae_million', 'N/A')}
-                  میلیون تومان
-                - CV R²:
-                  {metadata.get('performance', {}).get('cv_r2_mean', 'N/A')}
-                  ±
-                  {metadata.get('performance', {}).get('cv_r2_std', 'N/A')}
+                **مدل‌های اختصاصی هر برند:**
+                (برندهایی که در این جدول نیستند از مدل عمومی استفاده می‌کنند)
                 """
+            )
+            gr.HTML(
+                (
+                    "<table><tr><th>برند</th><th>بهترین مدل</th>"
+                    "<th>تعداد نمونه</th><th>R² تست</th></tr>"
+                    f"{rows_html}</table>"
+                )
+                if rows_html
+                else "<p>هیچ مدل اختصاصی‌ای آموزش داده نشده (داده کافی نبود).</p>"
             )
         else:
             gr.Markdown(

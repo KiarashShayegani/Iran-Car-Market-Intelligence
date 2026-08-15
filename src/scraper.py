@@ -5,7 +5,9 @@ deduplication, and per-record validation before accumulation.
 
 import hashlib
 import json
+import random
 import time
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -54,6 +56,7 @@ class BamaScraper:
 
         self.records: List[Dict] = []
         self.errors: List[Dict] = []
+        self.skip_reasons: Counter = Counter()
         self.logger = logger.bind(brand=brand_slug)
 
         self.logger.info(
@@ -64,7 +67,7 @@ class BamaScraper:
 
     @retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
+        wait=wait_exponential(multiplier=1, min=2, max=20),
         retry=retry_if_exception_type((requests.RequestException, json.JSONDecodeError)),
         reraise=True,
     )
@@ -107,6 +110,7 @@ class BamaScraper:
         """
         try:
             if item.get("type") != "ad":
+                self.skip_reasons["not_ad_item"] += 1
                 return None
 
             detail = item.get("detail", {})
@@ -141,7 +145,7 @@ class BamaScraper:
             # --- Parse price ---
             price_str = price_data.get("price", "0")
             if not price_str or str(price_str).strip() == "":
-                self.logger.debug("Skipping ad: no price (توافقی likely)")
+                self.skip_reasons["no_price_negotiable"] += 1
                 return None
 
             price_clean = str(price_str).replace(",", "").strip()
@@ -149,7 +153,7 @@ class BamaScraper:
 
             # CRITICAL: Skip zero-price listings (توافقی / corrupted)
             if price == 0:
-                self.logger.debug("Skipping ad: zero price")
+                self.skip_reasons["zero_price"] += 1
                 return None
 
             # --- Parse year ---
@@ -158,7 +162,7 @@ class BamaScraper:
 
             # Skip invalid years
             if not (1340 <= year <= 1410):
-                self.logger.debug("Skipping ad: invalid year {}", year)
+                self.skip_reasons["invalid_year"] += 1
                 return None
 
             # Generate deterministic ID for deduplication
@@ -176,7 +180,7 @@ class BamaScraper:
                 "model": car_model,
                 "trim": detail.get("trim", "ساده") or "ساده",
                 "year": year,
-                "mileage": mileage,
+                "mileage": float(mileage) if mileage is not None else None,
                 "mileage_unknown": mileage_unknown,
                 "fuel": detail.get("fuel", "بنزینی") or "بنزینی",
                 "transmission": detail.get("transmission", "دنده ای") or "دنده ای",
@@ -189,6 +193,7 @@ class BamaScraper:
             return record
 
         except (KeyError, ValueError, IndexError, TypeError) as e:
+            self.skip_reasons["parse_error"] += 1
             self.logger.warning(
                 "Parse error: {} | item_keys: {}", e, list(item.keys())
             )
@@ -246,7 +251,8 @@ class BamaScraper:
                     len(self.records),
                 )
 
-                time.sleep(self.scrape_cfg["rate_limit_delay"])
+                jitter = self.scrape_cfg.get("jitter_seconds", 0)
+                time.sleep(self.scrape_cfg["rate_limit_delay"] + random.uniform(0, jitter))
                 page += 1
 
             except Exception as e:
@@ -254,6 +260,11 @@ class BamaScraper:
                 break
 
         df = pd.DataFrame(self.records)
+
+        if self.skip_reasons:
+            self.logger.info(
+                "Skip reasons for '{}': {}", self.brand_slug, dict(self.skip_reasons)
+            )
 
         if df.empty:
             self.logger.warning("No records scraped for {}", self.brand_slug)
@@ -292,6 +303,51 @@ class BamaScraper:
         return str(path)
 
 
+def append_to_master(
+    df: pd.DataFrame, master_path: str = "data/raw/master_history.parquet"
+) -> pd.DataFrame:
+    """
+    Merge freshly scraped listings into a cumulative master dataset.
+
+    Without this, every pipeline run overwrites `combined_latest.parquet`
+    and the model always trains on a single day's snapshot (~2-3k rows).
+    This keeps every listing ever seen, updating its latest snapshot
+    (price, mileage, etc.) while preserving the first time it appeared,
+    so the dataset - and model quality - actually grows day over day.
+
+    Args:
+        df: Freshly scraped, deduplicated DataFrame for this run.
+        master_path: Path to the cumulative Parquet file.
+
+    Returns:
+        The updated master DataFrame.
+    """
+    path = Path(master_path)
+    df = df.copy()
+    df["first_seen_at"] = df["scraped_at"]
+
+    if path.exists():
+        existing = pd.read_parquet(path)
+        combined = pd.concat([existing, df], ignore_index=True)
+    else:
+        combined = df
+
+    first_seen = combined.groupby("listing_id")["first_seen_at"].min()
+    combined = combined.sort_values("scraped_at").drop_duplicates(
+        subset="listing_id", keep="last"
+    )
+    combined["first_seen_at"] = combined["listing_id"].map(first_seen)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    combined.to_parquet(path, index=False)
+    logger.info(
+        "Master history updated | {} total unique listings ({} scraped this run)",
+        len(combined),
+        len(df),
+    )
+    return combined
+
+
 class MultiBrandScraper:
     """Orchestrate scraping across all enabled brands."""
 
@@ -320,6 +376,7 @@ class MultiBrandScraper:
         logger.info("Multi-brand scrape | {} brands enabled", len(enabled))
 
         results: Dict[str, pd.DataFrame] = {}
+        cooldown = self.config["scraping"].get("inter_brand_cooldown", 0)
 
         for brand_slug in enabled:
             try:
@@ -335,8 +392,14 @@ class MultiBrandScraper:
             except Exception as e:
                 logger.error("Failed to scrape {}: {}", brand_slug, e)
                 continue
+            finally:
+                # A short pause between brands reduces load on bama.ir's
+                # API and lowers the odds of tripping rate-limiting (503s).
+                if cooldown:
+                    time.sleep(cooldown)
 
-        # Save combined snapshot
+        # Save today's snapshot (kept for debugging/audit) and merge it
+        # into the cumulative master history the cleaner/trainer use.
         if results:
             combined = pd.concat(results.values(), ignore_index=True)
             combined_path = Path("data/raw") / "combined_latest.parquet"
@@ -346,5 +409,6 @@ class MultiBrandScraper:
                 len(combined),
                 combined_path,
             )
+            append_to_master(combined)
 
         return results

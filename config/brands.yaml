@@ -7,10 +7,24 @@ scraping:
   request_timeout: 30
   max_retries: 3
   retry_delay: 2
-  rate_limit_delay: 1.5
+  rate_limit_delay: 2.0          # base delay between page requests (seconds)
+  jitter_seconds: 1.0            # random extra delay added on top, to avoid a robotic fixed cadence
+  inter_brand_cooldown: 5        # pause between brands, eases load on bama.ir and reduces 503s
   user_agent: "ICMI-Bot/2.0"
   max_pages_per_brand: 50
   consecutive_empty_threshold: 3
+
+# General pipeline settings not specific to scraping/validation/training.
+pipeline:
+  current_year_shamsi: 1405      # update manually around Nowruz until jdatetime is wired in
+
+# Bounds used by src/validator.py. Rows outside these are dropped (with a
+# logged reason) rather than crashing the whole pipeline.
+validation:
+  price_min: 3000000             # ~3M Toman floor - drops deposit/rental-style junk prices
+  price_max: 200000000000        # 200B Toman ceiling - generous for rare imports, still catches corrupted parses
+  min_year: 1340
+  max_year: 1410
 
 brands:
   pride:
@@ -113,6 +127,15 @@ features:
     - body_status_ordinal
     - age
   target: price
+
+# Used by src/trainer.py - controls the multi-model comparison and
+# per-brand vs. global-fallback split.
+training:
+  min_samples_per_brand: 60      # brands with fewer rows than this use the global fallback model instead
+  test_size: 0.2
+  cv_folds: 5
+  candidate_models: ["catboost", "xgboost", "random_forest", "mlp"]
+  random_seed: 42
 
 body_status_hierarchy:
   "اتاق تعویض": 1

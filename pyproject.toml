@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "Kiarash Shayegani", email = "kiarash.shayegani.st@gmail.com"}
+    {name = "Kiarash Shayegani", email = "your.email@example.com"}
 ]
 keywords = [
     "iran", "car", "market", "price-prediction", "machine-learning",
@@ -21,6 +21,7 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -37,6 +38,7 @@ dependencies = [
     "pandera>=0.18.0",
     "catboost>=1.2.0",
     "scikit-learn>=1.3.0",
+    "xgboost>=2.0.0",
     "joblib>=1.3.0",
     "gradio>=4.0.0",
     "plotly>=5.18.0",
@@ -62,15 +64,15 @@ include = ["src*", "app*", "config*"]
 
 [tool.black]
 line-length = 100
-target-version = ['py311']
+target-version = ['py310']
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py310"
 select = ["E", "F", "I", "W", "UP"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

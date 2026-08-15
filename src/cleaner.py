@@ -2,9 +2,9 @@
 Data cleaning and feature engineering pipeline.
 NO target leakage. NO price-based encoding.
 
-Preprocessing steps (similar to v1, but improved):
+Preprocessing steps:
   1. String cleaning (strip whitespace)
-  2. Outlier removal (IQR method, 2.0 * IQR)
+  2. Outlier removal (IQR method, 2.0 * IQR), computed PER BRAND
   3. Mileage imputation (year-group medians, with flag preserved)
   4. Feature engineering:
      - age = current_year - year
@@ -33,7 +33,9 @@ class DataCleaner:
         with open(config_path, "r", encoding="utf-8") as f:
             self.config = yaml.safe_load(f)
 
-        self.current_year = 1404
+        self.current_year = self.config.get("pipeline", {}).get(
+            "current_year_shamsi", 1404
+        )
 
     def clean(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -41,7 +43,7 @@ class DataCleaner:
 
         Steps:
             1. String cleaning
-            2. Outlier removal (price, mileage)
+            2. Outlier removal (price, mileage), per brand
             3. Mileage imputation with year-group medians
             4. Feature engineering (age, body_status_ordinal)
             5. Categorical normalization
@@ -105,36 +107,54 @@ class DataCleaner:
 
     def _remove_outliers(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Remove statistical outliers using IQR method.
-        Uses 2.0 * IQR (more permissive than 1.5).
+        Remove statistical outliers using IQR method (2.0 * IQR),
+        computed PER BRAND when possible.
+
+        A single global price band doesn't make sense across brands
+        that span cheap economy cars and expensive imports - grouping
+        avoids clipping a legitimately expensive Toyota just because
+        it looks like an outlier next to a Pride.
         """
+        group_col = "brand_slug" if "brand_slug" in df.columns else None
+
         for col in ["price", "mileage"]:
             if col not in df.columns or df[col].isna().all():
                 continue
 
-            valid = df[col].dropna()
-            if len(valid) < 10:
-                continue
-
-            q1 = valid.quantile(0.25)
-            q3 = valid.quantile(0.75)
-            iqr = q3 - q1
-            lower = q1 - 2.0 * iqr
-            upper = q3 + 2.0 * iqr
-
             before = len(df)
-            # Keep rows where value is within bounds OR is null
-            df = df[
-                (df[col].isna()) | ((df[col] >= lower) & (df[col] <= upper))
-            ]
+
+            if group_col:
+                keep_mask = pd.Series(True, index=df.index)
+                for _, group_idx in df.groupby(group_col).groups.items():
+                    valid = df.loc[group_idx, col].dropna()
+                    if len(valid) < 10:
+                        continue
+                    q1 = valid.quantile(0.25)
+                    q3 = valid.quantile(0.75)
+                    iqr = q3 - q1
+                    lower = q1 - 2.0 * iqr
+                    upper = q3 + 2.0 * iqr
+                    in_bounds = df.loc[group_idx, col].isna() | df.loc[
+                        group_idx, col
+                    ].between(lower, upper)
+                    keep_mask.loc[group_idx] &= in_bounds
+                df = df[keep_mask]
+            else:
+                valid = df[col].dropna()
+                if len(valid) < 10:
+                    continue
+                q1 = valid.quantile(0.25)
+                q3 = valid.quantile(0.75)
+                iqr = q3 - q1
+                lower = q1 - 2.0 * iqr
+                upper = q3 + 2.0 * iqr
+                df = df[
+                    (df[col].isna()) | ((df[col] >= lower) & (df[col] <= upper))
+                ]
+
             removed = before - len(df)
-            logger.info(
-                "Outlier removal ({}) | {} removed | bounds: {:.0f} - {:.0f}",
-                col,
-                removed,
-                lower,
-                upper,
-            )
+            logger.info("Outlier removal ({}) | {} removed", col, removed)
+
         return df
 
     def _impute_mileage(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -151,7 +171,6 @@ class DataCleaner:
 
         logger.info("Imputing {} missing mileage values", missing_count)
 
-        # Create year groups
         def year_group(year: int) -> str:
             if year <= 1380:
                 return "old"
@@ -162,7 +181,6 @@ class DataCleaner:
 
         df["_year_group"] = df["year"].apply(year_group)
 
-        # Calculate medians from known values
         known = df[df["mileage"].notna()]
         if len(known) > 0:
             medians = known.groupby("_year_group")["mileage"].median()
@@ -173,12 +191,10 @@ class DataCleaner:
 
         logger.info("Imputation medians: {}", medians.to_dict())
 
-        # Impute by group
         for group, median in medians.items():
             mask = (df["_year_group"] == group) & (df["mileage"].isna())
             df.loc[mask, "mileage"] = median
 
-        # Fallback
         df["mileage"] = df["mileage"].fillna(overall_median)
         df = df.drop(columns=["_year_group"])
 
@@ -192,7 +208,8 @@ def process_raw_file(
     Process a raw Parquet file through the cleaning pipeline.
 
     Args:
-        raw_path: Path to raw Parquet file.
+        raw_path: Path to raw Parquet file (ideally the cumulative
+            master history, so training data grows over time).
         output_dir: Directory for cleaned output.
 
     Returns:
@@ -205,7 +222,7 @@ def process_raw_file(
     # Load
     df = pd.read_parquet(raw_path)
 
-    # Validate raw
+    # Validate raw (drops corrupted rows, doesn't crash the pipeline)
     df = validate_raw(df)
 
     # Clean

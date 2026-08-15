@@ -7,17 +7,19 @@ Usage:
     python run_pipeline.py
 
 This script runs the full ICMI pipeline:
-  1. Scrape all enabled brands from bama.ir
-  2. Validate raw data against schema
+  1. Scrape all enabled brands from bama.ir (and merge into the
+     cumulative master history dataset)
+  2. Validate raw data against schema (bad rows are dropped, not fatal)
   3. Clean and engineer features
   4. Save to SQLite database + CSV export
-  5. Train unified CatBoost model
+  5. Train a best-model-per-brand + one global fallback model
 
 All steps are logged to logs/ and console.
 """
 
 import sys
 from pathlib import Path
+
 import pandas as pd
 from loguru import logger
 
@@ -47,25 +49,33 @@ def main() -> None:
 
     # Step 2: Process (validate + clean)
     logger.info("STEP 2/4: Validating and cleaning data")
-    raw_path = "data/raw/combined_latest.parquet"
-    if not Path(raw_path).exists():
-        logger.error("Combined raw file not found: {}", raw_path)
-        sys.exit(1)
 
-    processed_path = process_raw_file(raw_path)
+    # Prefer the cumulative master history (grows every run) over the
+    # single-day snapshot, so the model sees more data over time.
+    master_path = "data/raw/master_history.parquet"
+    raw_path = master_path if Path(master_path).exists() else "data/raw/combined_latest.parquet"
+
+    try:
+        processed_path = process_raw_file(raw_path)
+    except Exception as e:
+        logger.error("Cleaning/validation failed: {}", e)
+        sys.exit(1)
 
     # Step 3: Save to database
     logger.info("STEP 3/4: Saving to database")
-    db = CarDatabase()
     df = pd.read_parquet(processed_path)
+    db = CarDatabase()
     db.upsert_listings(df)
     db.export_to_csv()
 
-    # Step 4: Train model
-    logger.info("STEP 4/4: Training model")
+    # Step 4: Train model(s)
+    logger.info("STEP 4/4: Training models (per-brand + global fallback)")
     try:
-        artifacts = train_pipeline(processed_path)
-        logger.info("Model saved: {}", artifacts)
+        summary = train_pipeline(processed_path)
+        logger.info(
+            "Trained {} dedicated brand model(s) + 1 global fallback",
+            len(summary.get("brands", {})),
+        )
     except Exception as e:
         logger.error("Training failed: {}", e)
         sys.exit(1)
@@ -76,6 +86,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    import pandas as pd  # Imported here to avoid circular issues
-
     main()

@@ -1,5 +1,5 @@
 # ICMI v2.0 - Iran Car Market Intelligence
-# Python 3.11+ required
+# Python 3.10+ required
 # Install: pip install -r requirements.txt
 
 # Core data & ML
@@ -9,6 +9,7 @@ numpy>=1.24.0
 scikit-learn>=1.3.0
 joblib>=1.3.0
 catboost>=1.2.0
+xgboost>=2.0.0
 
 # Data validation
 pandera>=0.18.0
