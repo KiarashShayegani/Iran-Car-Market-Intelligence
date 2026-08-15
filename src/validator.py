@@ -8,6 +8,16 @@ specific rows that fail a data-range check, logging why. If pandera
 reports a failure with no row index (a whole-column dtype/shape
 problem coercion couldn't fix), that's a real upstream bug and we
 still raise.
+
+CHANGELOG (this patch):
+  - build_raw_schema() and build_processed_schema() were missing
+    several columns the scraper/cleaner actually produce (name, trim,
+    model, brand_name_fa, manufacturer, source_url, scraped_at). With
+    strict="filter", any column not listed in the schema is silently
+    dropped - which meant validate_raw() was stripping name/trim right
+    after scraping, and validate_processed() then crashed because it
+    required those same columns to be present. Both schemas now list
+    every column produced upstream.
 """
 
 from typing import Any, Dict, Optional
@@ -49,6 +59,11 @@ def build_raw_schema(cfg: Optional[Dict[str, Any]] = None) -> DataFrameSchema:
         {
             "listing_id": Column(str, unique=True, nullable=False),
             "brand_slug": Column(str, Check.isin(VALID_BRANDS), nullable=False),
+            "brand_name_fa": Column(str, nullable=True),
+            "manufacturer": Column(str, nullable=True),
+            "name": Column(str, nullable=False),
+            "model": Column(str, nullable=True),
+            "trim": Column(str, nullable=False),
             "year": Column(int, Check.in_range(year_min, year_max), nullable=False),
             "mileage": Column(
                 float,
@@ -67,6 +82,7 @@ def build_raw_schema(cfg: Optional[Dict[str, Any]] = None) -> DataFrameSchema:
             ),
             "body_status": Column(str, nullable=False),
             "scraped_at": Column(pa.DateTime, nullable=False),
+            "source_url": Column(str, nullable=True),
         },
         strict="filter",  # drop columns not in schema (e.g. first_seen_at)
         coerce=True,  # auto-fix dtype mismatches (e.g. int64 mileage -> float64)
@@ -85,7 +101,10 @@ def build_processed_schema(cfg: Optional[Dict[str, Any]] = None) -> DataFrameSch
         {
             "listing_id": Column(str, nullable=False),
             "brand_slug": Column(str, nullable=False),
+            "brand_name_fa": Column(str, nullable=True),
+            "manufacturer": Column(str, nullable=True),
             "name": Column(str, nullable=False),
+            "model": Column(str, nullable=True),
             "trim": Column(str, nullable=False),
             "year": Column(int, Check.in_range(year_min, year_max), nullable=False),
             "age": Column(int, Check.in_range(0, 60), nullable=False),
@@ -96,6 +115,8 @@ def build_processed_schema(cfg: Optional[Dict[str, Any]] = None) -> DataFrameSch
             "body_status": Column(str, nullable=False),
             "body_status_ordinal": Column(int, Check.in_range(1, 15), nullable=False),
             "price": Column(int, Check.in_range(price_min, price_max), nullable=False),
+            "scraped_at": Column(pa.DateTime, nullable=False),
+            "source_url": Column(str, nullable=True),
         },
         strict="filter",
         coerce=True,
