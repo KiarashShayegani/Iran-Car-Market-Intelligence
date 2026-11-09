@@ -11,8 +11,8 @@ every downstream artifact is traceable to it.
 - Reset the repository to a clean scaffold. The complete v2 codebase
   (Bama-only price-prediction pipeline: brand-keyword scraper, CatBoost/XGBoost
   per-brand models, Gradio app, daily workflow) is preserved in the
-  `archive/v2` branch and the `v2-final` tag, plus a local backup at
-  `/data/work/projects/archive/icmi_v2_local_backup_20261109`.
+  `archive/v2` branch and the `v2-final` tag, plus a full local backup
+  outside the repository.
 - New `src/icmi` package skeleton with the target layering:
   `core` (schema, paths, config), `collectors`, `pipeline`, `retrieval`,
   `analytics`.
