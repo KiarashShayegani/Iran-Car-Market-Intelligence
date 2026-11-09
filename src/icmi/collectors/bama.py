@@ -85,7 +85,7 @@ class BamaCollector(BaseCollector):
     source_key = "bama"
 
     def page_params(self, page_index: int) -> dict[str, Any]:
-        params: dict[str, Any] = {"pageIndex": page_index}
+        params: dict[str, Any] = {**self.collection_params, "pageIndex": page_index}
         if self.source.pagination and self.source.pagination.page_size:
             params["pageSize"] = self.source.pagination.page_size
         return params

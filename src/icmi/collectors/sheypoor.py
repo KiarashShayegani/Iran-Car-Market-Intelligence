@@ -85,7 +85,7 @@ class SheypoorCollector(BaseCollector):
         self._cursor: str | None = None
 
     def page_params(self, page_index: int) -> dict[str, Any]:
-        params: dict[str, Any] = {"p": page_index}
+        params: dict[str, Any] = {**self.collection_params, "p": page_index}
         if self._cursor is not None:
             params["f"] = self._cursor
         return params

@@ -69,11 +69,14 @@ class BaseCollector(ABC):
         pipeline: PipelineConfig,
         run_id: str,
         execution_mode: str = "local",
+        collection: str = "full",
     ) -> None:
         self.source = source
         self.pipeline = pipeline
         self.run_id = run_id
         self.execution_mode = execution_mode
+        self.collection = collection
+        self.collection_params = source.collection_params(collection)
         # Stable identifier for filesystem/manifest use; collectors may
         # override with the config key (class attribute source_key).
         self.source_key = getattr(self, "source_key", None) or source.display_name
@@ -109,6 +112,22 @@ class BaseCollector(ABC):
     @abstractmethod
     def parse_listing(self, ad: dict, payload_ref: RawPayloadRef) -> CanonicalRecord | None:
         """Map one raw ad payload to a canonical record (None = skip, with reason)."""
+
+    @classmethod
+    def parse_only(cls, source: SourceConfig, pipeline: PipelineConfig) -> BaseCollector:
+        """Extraction-only instance (no HTTP session, no writer, no I/O).
+
+        Used by the ETL to re-derive canonical records from raw payloads
+        deterministically.
+        """
+        obj = cls.__new__(cls)
+        obj.source = source
+        obj.pipeline = pipeline
+        obj.source_key = getattr(obj, "source_key", None) or source.display_name
+        obj.collection = "full"
+        obj.collection_params = {}
+        obj.skip_reasons = {}
+        return obj
 
     def observe_page(self, page_payload: dict) -> None:
         """Hook: inspect a fetched page (e.g. capture the next pagination cursor).
@@ -257,6 +276,7 @@ class BaseCollector(ABC):
             run_id=self.run_id,
             platform=self.source_key,
             execution_mode=self.execution_mode,
+            collection=self.collection,
             status=status,
             started_at=started_at,
             completed_at=utc_now(),

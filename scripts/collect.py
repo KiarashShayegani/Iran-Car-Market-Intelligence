@@ -47,6 +47,10 @@ def main(argv: list[str] | None = None) -> int:
         "--target-listings", type=int, default=36,
         help="stop after this many unique listings (default: 36)",
     )
+    parser.add_argument(
+        "--collection", default="full",
+        help="named collection preset from config (default: full)",
+    )
     parser.add_argument("--config", default=None, help="alternative sources.yaml")
     args = parser.parse_args(argv)
 
@@ -65,11 +69,17 @@ def main(argv: list[str] | None = None) -> int:
 
     collector_cls = get_collector(args.platform)
     run_id = build_run_id(args.platform, args.mode)
+    try:
+        source.collection_params(args.collection)
+    except KeyError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     collector = collector_cls(
         source=source,
         pipeline=sources.pipeline,
         run_id=run_id,
         execution_mode=args.mode,
+        collection=args.collection,
     )
     result = collector.collect(
         target_listings=args.target_listings, max_pages=args.max_pages

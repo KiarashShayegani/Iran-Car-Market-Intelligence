@@ -51,7 +51,7 @@ class HamrahMechanicCollector(BaseCollector):
     source_key = "hamrah_mechanic"
 
     def page_params(self, page_index: int) -> dict[str, Any]:
-        params: dict[str, Any] = {"page": page_index + 1}  # source is 1-based
+        params: dict[str, Any] = {**self.collection_params, "page": page_index + 1}
         if self.source.pagination and self.source.pagination.page_size:
             params["size"] = self.source.pagination.page_size
         return params

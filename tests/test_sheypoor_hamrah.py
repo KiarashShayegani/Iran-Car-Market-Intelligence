@@ -22,6 +22,8 @@ def make_collector(cls, source_key: str):
         user_agent="test-agent",
     )
     collector.skip_reasons = {}
+    collector.collection = "full"
+    collector.collection_params = {}
     if cls is SheypoorCollector:
         collector._cursor = None  # normally set in __init__
     return collector

@@ -9,6 +9,7 @@ platforms or alter endpoints; there are no hardcoded sources in code.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
@@ -32,6 +33,14 @@ class PaginationConfig(BaseModel):
     page_size_param: str | None = None
 
 
+class CollectionConfig(BaseModel):
+    """A named parameter preset for one source (e.g. the unfiltered feed now,
+    brand-targeted queries later). Adding breadth is a config entry."""
+
+    description: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
 class SourceConfig(BaseModel):
     display_name: str
     display_name_fa: str
@@ -41,6 +50,18 @@ class SourceConfig(BaseModel):
     pagination: PaginationConfig | None = None
     notes: str | None = None
     field_support: list[str] = Field(default_factory=list)
+    collections: dict[str, CollectionConfig] = Field(default_factory=dict)
+
+    def collection_params(self, name: str) -> dict[str, Any]:
+        """Params for a named collection preset ('full' by default)."""
+        if not self.collections:
+            if name == "full":
+                return {}
+            raise KeyError(f"Source has no collection presets; '{name}' unknown")
+        if name not in self.collections:
+            available = ", ".join(sorted(self.collections))
+            raise KeyError(f"Unknown collection '{name}' (available: {available})")
+        return dict(self.collections[name].params)
 
 
 class SourcesConfig(BaseModel):

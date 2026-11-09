@@ -105,6 +105,7 @@ class RunManifest(BaseModel):
     run_id: str
     platform: str
     execution_mode: str  # "local" | "ci"
+    collection: str = "full"  # named collection preset from config
     status: str  # "success" | "partial" | "failed"
     started_at: datetime
     completed_at: datetime
@@ -126,7 +127,8 @@ class RunManifest(BaseModel):
     def summary_lines(self) -> list[str]:
         """Human-readable summary for CLI output and reports."""
         lines = [
-            f"run_id={self.run_id} platform={self.platform} mode={self.execution_mode}",
+            f"run_id={self.run_id} platform={self.platform} mode={self.execution_mode}"
+            f" collection={self.collection}",
             f"status={self.status} pages={self.pages} records={self.records}",
             f"P0 coverage: {self.quality.p0_coverage_pct}%  "
             f"P1 coverage: {self.quality.p1_coverage_pct}%",
