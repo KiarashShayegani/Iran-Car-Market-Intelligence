@@ -31,9 +31,15 @@ All endpoints are experimental findings, not guaranteed API contracts.
 
 ## Development
 
-Use the repo-local wrapper — it keeps **all** caches and environments inside
-the repository directory and never touches machine-global caches shared with
-other projects:
+**Always use the repo-local wrappers** — `scripts/dev.sh` (Linux/macOS) or
+`.\scripts\dev.ps1` (Windows PowerShell). They guarantee ICMI's full tooling
+isolation:
+
+- `UV_CACHE_DIR` is pointed at the repo's own `.uv-cache/`, **overriding any
+  machine-global uv cache** — so ICMI never reads, writes, or conflicts with
+  the caches of other projects on the machine.
+- A gitignored repo-local `.env` is loaded into the environment (package
+  index overrides, API keys, R2 credentials — see `.env.example`).
 
 ```bash
 scripts/dev.sh sync              # create .venv, install locked dependencies
@@ -41,13 +47,23 @@ scripts/dev.sh run pytest        # run tests
 scripts/dev.sh run ruff check .
 ```
 
-On Windows (PowerShell): `.\scripts\dev.ps1 sync`, etc.
+```powershell
+.\scripts\dev.ps1 sync
+.\scripts\dev.ps1 run pytest
+```
+
+### Package index
+
+Standard PyPI (`https://pypi.org/simple`) is the default — no network-specific
+mirror is imposed by the repository. If pypi.org is unreachable from your
+network (e.g. from Iran), copy `.env.example` to `.env` locally and uncomment
+the `UV_DEFAULT_INDEX` mirror line. That choice stays on your machine and is
+never committed.
 
 Everything (virtualenv, package cache, datasets, model caches) lives inside
-the repository directory, isolated from the rest of the system. Copying the
-repository directory to another machine is sufficient; then run the sync
-command and `uv run python scripts/sync_latest_data.py` to fetch the latest
-data layer.
+the repository directory. Copying the repository directory to another machine
+is sufficient; then run the sync command and
+`uv run python scripts/sync_latest_data.py` to fetch the latest data layer.
 
 ## License
 
