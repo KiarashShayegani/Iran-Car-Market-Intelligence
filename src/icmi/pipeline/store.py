@@ -46,7 +46,10 @@ class CanonicalStore:
     def __init__(self, db_path: Path | None = None) -> None:
         self.db_path = db_path or canonical_dir() / "icmi.db"
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(self.db_path)
+        # check_same_thread=False: sync API frameworks run endpoints in a
+        # threadpool. Safe at this scale (short serialized statements, single
+        # writer in practice); a lock is the upgrade path if concurrency grows.
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._init_schema()
 
