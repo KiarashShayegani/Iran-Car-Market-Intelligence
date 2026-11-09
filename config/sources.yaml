@@ -36,10 +36,46 @@ sources:
       page_param: pageIndex
       page_size: 12
       page_size_param: pageSize
+    # Canonical fields Bama is known to be able to provide (from the research
+    # notebook: 100% description coverage on 100 sampled listings).
+    # source_published_at is a relative label, not an absolute timestamp.
+    # manufacturer_raw is not exposed by the search API.
+    field_support:
+      - source_listing_id
+      - original_url
+      - title
+      - description
+      - brand_raw
+      - brand_en_raw
+      - model_raw
+      - trim_raw
+      - year_raw
+      - mileage_raw
+      - price_raw
+      - location_raw
+      - fuel_raw
+      - transmission_raw
+      - body_type_raw
+      - body_condition_raw
+      - color_raw
+      - seller_type
+      - seller_id
+      - image_urls
+      - image_count
+      - source_published_at
+      - source_modified_at
     notes: >-
-      Search API returns JSON with type=='ad' nodes carrying a `detail` object.
-      Public listing URL from detail.url (relative) or metadata.canonical.
-      pageIndex is zero-based.
+      Search API returns JSON with type=='ad' nodes carrying a `detail` object
+      under data.ads. Public listing URL from detail.url (relative) or
+      metadata.canonical. pageIndex is zero-based.
+      Verified live (2026-11-09): the pageSize parameter is NOT honored
+      (~24 ads per page returned); response envelope exposes
+      data.metadata.{total_count,total_pages,has_next} and the collector uses
+      has_next to stop. price values are formatted STRINGS with commas
+      ("7,100,000,000"); currency is not exposed (implicitly Toman) —
+      normalization to integer happens downstream, raw is preserved.
+      seller_type/seller_id appear only on featured ads (rare);
+      years may be Gregorian for imported vehicles (preserved raw).
 
   sheypoor:
     display_name: Sheypoor
