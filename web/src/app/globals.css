@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f8fa;
+  --foreground: #1c2430;
+  --card: #ffffff;
+  --accent: #0f766e;
+  --accent-soft: #ccfbf1;
+  --border: #e2e8f0;
+  --muted: #64748b;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Vazirmatn, "Segoe UI", Tahoma, Arial, sans-serif;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 9999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.platform-bama {
+  background: #fef3c7;
+  color: #92400e;
+}
+.platform-sheypoor {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.platform-hamrah_mechanic {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.excerpt {
+  white-space: pre-line;
+  line-height: 1.9;
+}
+
+.score-chip {
+  font-variant-numeric: tabular-nums;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+input[type="text"],
+input[type="number"],
+select,
+textarea {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-family: inherit;
+  width: 100%;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.btn {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 0.5rem;
+  padding: 0.55rem 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #fff;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.55rem 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.answer-text {
+  line-height: 2.1;
+  white-space: pre-wrap;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
