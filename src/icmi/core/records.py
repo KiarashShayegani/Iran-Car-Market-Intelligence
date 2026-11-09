@@ -124,11 +124,20 @@ class CanonicalRecord(BaseModel):
 
 
 def has_value(value: Any) -> bool:
-    """True when a field genuinely carries data (ported from the research notebook)."""
+    """True when a field genuinely carries data (ported from the research notebook).
+
+    NaN floats count as NO value: JSON parsers accept NaN literals and pandas
+    propagates them — they must never surface as "nan" strings downstream.
+    """
+    import math
+
     if value is None:
         return False
+    if isinstance(value, float) and math.isnan(value):
+        return False
     if isinstance(value, str):
-        return bool(value.strip())
+        text = value.strip()
+        return bool(text) and text.casefold() not in {"nan", "none", "null"}
     if isinstance(value, (list, tuple, dict, set)):
         return bool(value)
     return True
