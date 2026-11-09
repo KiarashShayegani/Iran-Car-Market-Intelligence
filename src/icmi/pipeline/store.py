@@ -173,6 +173,11 @@ class CanonicalStore:
                 if has_value(record.price_raw)
                 else None
             )
+            # A zero price means "no stated price" (negotiable) on these
+            # marketplaces — it must never count as a comparable amount in
+            # filters, stats, or history. Raw value stays preserved verbatim.
+            if amount is not None and amount <= 0:
+                amount = None
             currency = record.price_currency_raw
 
             existing = self._conn.execute(
