@@ -171,8 +171,13 @@ sources:
     status: deferred_blocked
     base_url: https://api.divar.ir/v8/postlist/w/search
     notes: >-
-      HTTP 403 on direct GET/POST investigation. Requires a proper client
-      emulation session before it can be a collector candidate.
+      Time-boxed probe (2026-11-10, from owner's Iranian network): GET still
+      403, but POST is ACCEPTED (400 on payload shape — not IP-blocked).
+      Error reveals the contract: protobuf-JSON with Any-typed fields
+      ('Missing @type ... post_list.GetPostListRequest'). Cracking the exact
+      payload requires inspecting live web-client traffic (browser devtools
+      or JS bundle) — a future collector task, feasible but not trivial.
+      Status upgraded from deferred_blocked to feasible_unverified.
 
   karnameh:
     display_name: Karnameh

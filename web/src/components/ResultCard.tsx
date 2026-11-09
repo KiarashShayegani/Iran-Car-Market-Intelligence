@@ -1,6 +1,11 @@
 "use client";
 
-import { PLATFORM_LABELS, SearchResultItem } from "@/lib/api";
+import {
+  PLATFORM_LABELS,
+  SearchResultItem,
+  formatNumber,
+  formatToman,
+} from "@/lib/api";
 
 export default function ResultCard({
   result,
@@ -29,6 +34,25 @@ export default function ResultCard({
         >
           جزئیات
         </button>
+      </div>
+
+      <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+        {result.brand_raw && <span className="chip btn-secondary">{result.brand_raw}</span>}
+        {result.model_raw && <span className="chip btn-secondary">{result.model_raw}</span>}
+        {result.year_num !== null && (
+          <span className="chip btn-secondary num">سال {formatNumber(result.year_num)}</span>
+        )}
+        {result.mileage_km !== null && (
+          <span className="chip btn-secondary num">
+            کارکرد {formatNumber(result.mileage_km)} کیلومتر
+          </span>
+        )}
+        {result.price_amount !== null && (
+          <span className="chip score-chip num">{formatToman(result.price_amount)}</span>
+        )}
+        {result.location_raw && (
+          <span className="chip btn-secondary">{result.location_raw}</span>
+        )}
       </div>
 
       <p className="mt-2 font-semibold text-sm">{firstLine}</p>

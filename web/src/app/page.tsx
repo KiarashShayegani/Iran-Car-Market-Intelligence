@@ -2,22 +2,25 @@
 
 import { useState } from "react";
 import AskPanel from "@/components/AskPanel";
+import EstimatePanel from "@/components/EstimatePanel";
 import FilterPanel from "@/components/FilterPanel";
 import ListingModal from "@/components/ListingModal";
 import ResultCard from "@/components/ResultCard";
 import StatsPanel from "@/components/StatsPanel";
 import {
+  DEMO_QUERIES,
   EMPTY_FILTERS,
   FiltersState,
   SearchApiResponse,
   searchAds,
 } from "@/lib/api";
 
-type Tab = "search" | "ask" | "stats";
+type Tab = "search" | "ask" | "estimate" | "stats";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "search", label: "🔍 جستجو" },
   { key: "ask", label: "💬 پرسش هوشمند" },
+  { key: "estimate", label: "💰 تخمین قیمت" },
   { key: "stats", label: "📊 داشبورد بازار" },
 ];
 
@@ -30,12 +33,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [openListing, setOpenListing] = useState<string | null>(null);
 
-  const runSearch = async () => {
-    if (!query.trim()) return;
+  const runSearchFor = async (q: string) => {
+    if (!q.trim()) return;
     setLoading(true);
     setError(null);
     try {
-      setResults(await searchAds(query.trim(), filters));
+      setResults(await searchAds(q.trim(), filters));
     } catch (e) {
       setError(e instanceof Error ? e.message : "خطای ناشناخته");
       setResults(null);
@@ -43,6 +46,8 @@ export default function Home() {
       setLoading(false);
     }
   };
+
+  const runSearch = async () => runSearchFor(query);
 
   return (
     <div className="min-h-screen">
@@ -102,6 +107,40 @@ export default function Home() {
               </div>
             )}
 
+            {!results && !loading && !error && (
+              <div className="card p-4 mb-4">
+                <p className="text-xs mb-2" style={{ color: "var(--muted)" }}>
+                  نمونه‌پرسش‌ها (برای شروع کلیک کنید):
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {DEMO_QUERIES.map((dq) => (
+                    <button
+                      key={dq}
+                      onClick={() => {
+                        setQuery(dq);
+                        runSearchFor(dq);
+                      }}
+                      className="chip btn-secondary"
+                    >
+                      {dq}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {loading && (
+              <div className="space-y-3">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="card p-4 animate-pulse">
+                    <div className="h-4 rounded w-1/3" style={{ background: "var(--border)" }} />
+                    <div className="h-3 rounded w-2/3 mt-2" style={{ background: "var(--border)" }} />
+                    <div className="h-3 rounded w-1/2 mt-2" style={{ background: "var(--border)" }} />
+                  </div>
+                ))}
+              </div>
+            )}
+
             {results && (
               <div className="mb-3 text-xs" style={{ color: "var(--muted)" }}>
                 حالت: {results.mode === "hybrid" ? "ترکیبی (فیلتر + معنایی)" : "معنایی"} ·
@@ -140,6 +179,7 @@ export default function Home() {
           </>
         )}
 
+        {tab === "estimate" && <EstimatePanel onOpenDetail={setOpenListing} />}
         {tab === "stats" && <StatsPanel />}
       </main>
 

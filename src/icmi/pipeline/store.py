@@ -25,8 +25,15 @@ from icmi.core.paths import canonical_dir
 from icmi.core.records import CanonicalRecord, has_value
 from icmi.pipeline.normalize import (
     PRICE_NORMALIZATION_VERSION,
+    classify_year_calendar,
+    normalize_mileage_km,
     normalize_price_amount,
+    normalize_year,
 )
+
+# retrieval.normalization is a leaf utility (no project imports) — the
+# matching-key function lives there and is safe to use from the pipeline.
+from icmi.retrieval.normalization import normalize_for_key
 
 
 @dataclass
@@ -114,6 +121,7 @@ class CanonicalStore:
             );
             CREATE INDEX IF NOT EXISTS idx_listings_platform ON listings(source_platform);
             CREATE INDEX IF NOT EXISTS idx_listings_year ON listings(year_raw);
+            CREATE INDEX IF NOT EXISTS idx_listings_price ON listings(price_amount);
             CREATE TABLE IF NOT EXISTS price_observations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 listing_key TEXT NOT NULL REFERENCES listings(listing_key),
@@ -129,7 +137,32 @@ class CanonicalStore:
             CREATE INDEX IF NOT EXISTS idx_obs_run ON price_observations(run_id);
             """
         )
+        self._migrate()
         self._conn.commit()
+
+    def _migrate(self) -> None:
+        """Idempotent derived-column migration. New columns are populated on
+        upsert; existing rows are backfilled by re-ingesting from raw."""
+        existing = {
+            row["name"]
+            for row in self._conn.execute("PRAGMA table_info(listings)")
+        }
+        additions = {
+            "year_num": "INTEGER",
+            "year_calendar": "TEXT",
+            "mileage_km": "INTEGER",
+            "brand_key": "TEXT",
+            "model_key": "TEXT",
+        }
+        for name, col_type in additions.items():
+            if name not in existing:
+                self._conn.execute(
+                    f"ALTER TABLE listings ADD COLUMN {name} {col_type}"
+                )
+        for name in ("year_calendar", "brand_key", "model_key"):
+            self._conn.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_listings_{name} ON listings({name})"
+            )
 
     # --- runs ----------------------------------------------------------------
 
@@ -201,10 +234,12 @@ class CanonicalStore:
                     image_count, source_published_at, source_modified_at,
                     source_attributes_json, raw_payload_ref_json,
                     extraction_errors_json, first_seen_at, last_seen_at,
-                    scraped_at, extraction_version, updated_at
+                    scraped_at, extraction_version, updated_at,
+                    year_num, year_calendar, mileage_km, brand_key, model_key
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?
                 )
                 ON CONFLICT(listing_key) DO UPDATE SET
                     original_url=excluded.original_url,
@@ -238,9 +273,16 @@ class CanonicalStore:
                     last_seen_at=excluded.last_seen_at,
                     scraped_at=excluded.scraped_at,
                     extraction_version=excluded.extraction_version,
+                    year_num=excluded.year_num,
+                    year_calendar=excluded.year_calendar,
+                    mileage_km=excluded.mileage_km,
+                    brand_key=excluded.brand_key,
+                    model_key=excluded.model_key,
                     updated_at=excluded.updated_at
                 """,
-                self._listing_params(record, key, observed_at, amount),
+                self._listing_params(
+                    record, key, observed_at, amount, self._derive(record)
+                ),
             )
             if is_new:
                 stats.new_listings += 1
@@ -296,8 +338,28 @@ class CanonicalStore:
         self._conn.commit()
         return stats
 
+    def _derive(self, record: CanonicalRecord) -> dict:
+        """Derived matching/analytics fields (single derivation point at
+        ingest). Raw record values are never modified."""
+        year_num = normalize_year(record.year_raw)
+        mileage_km = normalize_mileage_km(record.mileage_raw)
+        if mileage_km is not None and mileage_km < 0:
+            mileage_km = None
+        return {
+            "year_num": year_num,
+            "year_calendar": classify_year_calendar(year_num),
+            "mileage_km": mileage_km,
+            "brand_key": normalize_for_key(record.brand_raw) or None,
+            "model_key": normalize_for_key(record.model_raw) or None,
+        }
+
     def _listing_params(
-        self, record: CanonicalRecord, key: str, observed_at: str, amount: int | None
+        self,
+        record: CanonicalRecord,
+        key: str,
+        observed_at: str,
+        amount: int | None,
+        derived: dict,
     ) -> tuple:
         return (
             key,
@@ -341,6 +403,11 @@ class CanonicalStore:
             observed_at,  # scraped_at
             record.extraction_version,
             observed_at,  # updated_at
+            derived["year_num"],
+            derived["year_calendar"],
+            derived["mileage_km"],
+            derived["brand_key"],
+            derived["model_key"],
         )
 
     def _refresh_current_price(self, key: str) -> None:

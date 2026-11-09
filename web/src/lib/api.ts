@@ -12,6 +12,13 @@ export interface SearchResultItem {
   raw_payload_ref_json: string;
   chunk_index: number;
   chunk_count: number;
+  brand_raw: string | null;
+  model_raw: string | null;
+  year_num: number | null;
+  year_calendar: string | null;
+  price_amount: number | null;
+  mileage_km: number | null;
+  location_raw: string | null;
 }
 
 export interface SearchApiResponse {
@@ -177,6 +184,14 @@ export async function fetchListing(
   if (!res.ok) throw new Error(`خطای دریافت آگهی (${res.status})`);
   return res.json();
 }
+
+export const DEMO_QUERIES = [
+  "ماشین اتوماتیک کم کارکرد خانوادگی",
+  "پژو 206 مدل ۹۸ به بالا",
+  "شاسی بلند وارداتی کم کارکرد",
+  "ماشین صفر با گارانتی",
+  "خودروی اقتصادی با مصرف کم",
+];
 
 export const PLATFORM_LABELS: Record<string, string> = {
   bama: "باما",

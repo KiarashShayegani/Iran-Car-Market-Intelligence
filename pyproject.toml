@@ -1,6 +1,6 @@
 [project]
 name = "icmi"
-version = "3.0.0"
+version = "3.1.0"
 description = "Iranian Car Market Intelligence — multi-source market data, semantic search, and grounded question answering"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }

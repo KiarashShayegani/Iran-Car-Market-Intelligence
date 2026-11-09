@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from icmi import __version__
+from icmi.analytics.comparables import estimate_market_range
 from icmi.analytics.stats import market_stats
 from icmi.core.paths import index_dir
 from icmi.pipeline.normalize import normalize_year
@@ -132,13 +133,13 @@ def create_app(
             mileage_max_km=mileage_max_km,
             location_contains=location_contains,
         )
-        response = get_search_service().search(q, filters, top_k=top_k)
-        return {
-            "query": response.query,
-            "mode": "hybrid" if not response.filters.is_empty() else "semantic",
-            "total_corpus": response.total_corpus,
-            "candidates_after_filters": response.candidates_after_filters,
-            "results": [
+        service = get_search_service()
+        response = service.search(q, filters, top_k=top_k)
+        meta_by_key = service.metadata.set_index("listing_key")
+        results = []
+        for r in response.results:
+            meta = meta_by_key.loc[r.listing_key] if r.listing_key in meta_by_key.index else None
+            results.append(
                 {
                     "listing_key": r.listing_key,
                     "source_platform": r.source_platform,
@@ -148,9 +149,37 @@ def create_app(
                     "raw_payload_ref_json": r.raw_payload_ref_json,
                     "chunk_index": r.chunk_index,
                     "chunk_count": r.chunk_count,
+                    "brand_raw": None if meta is None else _nan_safe(meta["brand_raw"]),
+                    "model_raw": None if meta is None else _nan_safe(meta["model_raw"]),
+                    "year_num": None if meta is None else _int_safe(meta["year_num"]),
+                    "year_calendar": None if meta is None else _nan_safe(meta["year_calendar"]),
+                    "price_amount": None if meta is None else _int_safe(meta["price_amount"]),
+                    "mileage_km": None if meta is None else _int_safe(meta["mileage_km"]),
+                    "location_raw": None if meta is None else _nan_safe(meta["location_raw"]),
                 }
-                for r in response.results
-            ],
+            )
+        return {
+            "query": response.query,
+            "mode": "hybrid" if not response.filters.is_empty() else "semantic",
+            "total_corpus": response.total_corpus,
+            "candidates_after_filters": response.candidates_after_filters,
+            "results": results,
+        }
+
+    @app.get("/estimate")
+    def estimate(
+        brand: str = Query(min_length=1),
+        model: str | None = None,
+        year: str | None = None,
+        mileage_km: int | None = None,
+    ) -> dict:
+        """Observed market range from comparable ads (retrieval-based, no ML)."""
+        result = estimate_market_range(
+            get_store(), brand=brand, model=model, year=year, mileage_km=mileage_km
+        )
+        return {
+            **result.__dict__,
+            "comparables": [c.__dict__ for c in result.comparables],
         }
 
     @app.get("/listings/{platform}/{listing_id}")
@@ -224,6 +253,26 @@ def create_app(
         }
 
     return app
+
+
+def _nan_safe(value) -> str | None:
+    import math
+
+    if value is None:
+        return None
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    return str(value)
+
+
+def _int_safe(value) -> int | None:
+    import math
+
+    if value is None:
+        return None
+    if isinstance(value, float):
+        return None if math.isnan(value) else int(value)
+    return int(value)
 
 
 def _calendar_of(year_raw) -> str | None:

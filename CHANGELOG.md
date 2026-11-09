@@ -1,5 +1,31 @@
 # Changelog
 
+## [3.1.0] — 2026-11-10
+
+### F5 — Price estimation, UI upgrades
+
+- **Retrieval-based price estimation** (replaces ML, owner decision):
+  `/estimate` + «تخمین قیمت» tab — observed p25/median/p75 from comparable
+  ads, calendar-aware year matching, small-sample honesty, full audit trail
+  of comparables with source links.
+- **Store gains derived columns** (year_num, year_calendar, mileage_km,
+  brand_key, model_key) — single derivation point at ingest, idempotent
+  migration; index/search/API reuse them. Canonical DB rebuilt from raw.
+- **UI upgrades**: quick-fact chips on result cards (formatted
+  price/mileage/year from normalized metadata), skeleton loading states,
+  demo-query chips, new «💰 تخمین قیمت» tab, app icon.
+- **Divar probe** (time-boxed): API reachable from Iran (POST accepted),
+  contract is protobuf-JSON (Any-typed) — feasible-unverified, documented.
+
+### F6 — Operations and polish
+
+- `docs/internal/OPERATIONS.md` — full manual start/stop/refresh guide.
+- `scripts/rebuild_search_assets.py` — one-shot derived-view rebuild.
+- README overhauled to match the shipped product.
+
+[3.1.0]: https://github.com/KiarashShayegani/Iran-Car-Market-Intelligence/releases
+
+
 All notable changes to ICMI are documented here. The project follows a
 versioned, ground-truth-first approach: raw source data is immutable, and
 every downstream artifact is traceable to it.

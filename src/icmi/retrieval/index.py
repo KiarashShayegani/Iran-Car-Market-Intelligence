@@ -25,13 +25,7 @@ import numpy as np
 import pandas as pd
 
 from icmi.core.paths import index_dir
-from icmi.pipeline.normalize import (
-    classify_year_calendar,
-    normalize_mileage_km,
-    normalize_year,
-)
 from icmi.retrieval.documents import DOCUMENT_VERSION
-from icmi.retrieval.normalization import normalize_for_key
 
 INDEX_FORMAT_VERSION = "index-v1"
 
@@ -62,20 +56,17 @@ class IndexedChunk:
 
 
 def _metadata_frame(store) -> pd.DataFrame:
-    """Listing-level filterable metadata for every canonical listing."""
+    """Listing-level filterable metadata — derived fields come straight from
+    the canonical store (single derivation point, populated at ingest)."""
     df = store.query_df(
         """
         SELECT listing_key, original_url, raw_payload_ref_json, extraction_version,
-               brand_raw, model_raw, year_raw, mileage_raw, price_amount, location_raw
+               brand_raw, model_raw, year_raw, mileage_raw, price_amount, location_raw,
+               brand_key, model_key, year_num, year_calendar, mileage_km
         FROM listings
         """
     )
     df["source_platform"] = df["listing_key"].str.split(":").str[0]
-    df["brand_key"] = df["brand_raw"].map(lambda v: normalize_for_key(v) or None)
-    df["model_key"] = df["model_raw"].map(lambda v: normalize_for_key(v) or None)
-    df["year_num"] = df["year_raw"].map(normalize_year)
-    df["year_calendar"] = df["year_num"].map(classify_year_calendar)
-    df["mileage_km"] = df["mileage_raw"].map(normalize_mileage_km)
     return df
 
 
