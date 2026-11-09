@@ -1,0 +1,241 @@
+{
+ "run_id": "20261109T192853-bama-local",
+ "platform": "bama",
+ "execution_mode": "local",
+ "status": "success",
+ "started_at": "2026-11-09T19:28:53.918068Z",
+ "completed_at": "2026-11-09T19:28:54.234474Z",
+ "extraction_version": "icmi-v3-extraction-0",
+ "config_schema_version": 1,
+ "pages": {
+  "requested": 1,
+  "fetched": 1,
+  "failed": 0,
+  "empty": 0,
+  "parse_failed": 0
+ },
+ "records": {
+  "extracted": 24,
+  "duplicates_within_run": 0
+ },
+ "skip_reasons": {},
+ "failed_requests": [],
+ "quality": {
+  "record_count": 24,
+  "p0_coverage_pct": 91.7,
+  "p1_coverage_pct": 83.3,
+  "fields": [
+   {
+    "field": "source_listing_id",
+    "priority": "P0",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "original_url",
+    "priority": "P0",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "title",
+    "priority": "P0",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "description",
+    "priority": "P0",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "manufacturer_raw",
+    "priority": "P0",
+    "supported_by_platform": false,
+    "populated": 0,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 0.0
+   },
+   {
+    "field": "brand_raw",
+    "priority": "P0",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "model_raw",
+    "priority": "P0",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "trim_raw",
+    "priority": "P0",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "year_raw",
+    "priority": "P0",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "mileage_raw",
+    "priority": "P0",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "price_raw",
+    "priority": "P0",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "location_raw",
+    "priority": "P0",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "fuel_raw",
+    "priority": "P1",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "transmission_raw",
+    "priority": "P1",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "body_type_raw",
+    "priority": "P1",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "body_condition_raw",
+    "priority": "P1",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "color_raw",
+    "priority": "P1",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "seller_type",
+    "priority": "P1",
+    "supported_by_platform": true,
+    "populated": 3,
+    "missing_in_ad": 21,
+    "extraction_failed": 0,
+    "coverage_pct": 12.5
+   },
+   {
+    "field": "seller_id",
+    "priority": "P1",
+    "supported_by_platform": true,
+    "populated": 3,
+    "missing_in_ad": 21,
+    "extraction_failed": 0,
+    "coverage_pct": 12.5
+   },
+   {
+    "field": "image_urls",
+    "priority": "P1",
+    "supported_by_platform": true,
+    "populated": 22,
+    "missing_in_ad": 2,
+    "extraction_failed": 0,
+    "coverage_pct": 91.7
+   },
+   {
+    "field": "image_count",
+    "priority": "P1",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "source_published_at",
+    "priority": "P1",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   },
+   {
+    "field": "source_modified_at",
+    "priority": "P1",
+    "supported_by_platform": true,
+    "populated": 24,
+    "missing_in_ad": 0,
+    "extraction_failed": 0,
+    "coverage_pct": 100.0
+   }
+  ]
+ },
+ "outputs": {
+  "raw_dir": "data/raw/20261109T192853-bama-local/bama"
+ },
+ "notes": null
+}

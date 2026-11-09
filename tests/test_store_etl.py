@@ -216,10 +216,14 @@ def test_ingest_run_reextracts_and_is_idempotent(tmp_path, monkeypatch):
         ref = json.loads(row["raw_payload_ref_json"])
         assert ref["run_id"] == run_id and ref["file"].startswith("records.jsonl#")
 
-        # idempotent re-ingest: no new listing, no duplicate observation
+        # Idempotent re-ingest, two layers:
+        # 1) run-level fast path — the run is already recorded, skipped entirely
         s2 = ingest_run(run_id, platform, store, sources.sources[platform], sources.pipeline)
-        assert (s2.new_listings, s2.updated_listings) == (0, 1)
-        assert s2.price_observations_appended == 0
+        assert s2.skipped_runs == 1
+        assert s2.new_listings == 0 and s2.updated_listings == 0
+        # 2) record-level safety net — covered by
+        #    test_cross_run_dedup_same_ad_maps_to_one_listing (re-upsert of the
+        #    same records yields updated=1 and no duplicate observations)
         assert store.observation_count("bama:abc123") == 1
 
         runs = store._conn.execute("SELECT run_id FROM runs").fetchall()

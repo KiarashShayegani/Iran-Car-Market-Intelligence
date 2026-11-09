@@ -34,6 +34,13 @@ def ingest_run(
             f"No raw records for run '{run_id}' platform '{platform}': {records_path}"
         )
 
+    # Run-level fast path: a run already recorded in the authoritative store
+    # is skipped entirely — no re-extraction, no repeated ETL (idempotence).
+    if store.has_run(run_id):
+        stats = IngestStats()
+        stats.skipped_runs = 1
+        return stats
+
     collector_cls: type[BaseCollector] = get_collector(platform)
     extractor = collector_cls.parse_only(source, pipeline)
 
@@ -57,11 +64,14 @@ def ingest_run(
 
     stats = store.upsert_listings(records, run_id)
 
+    # Record the run even without a manifest so the fast path stays reliable.
     manifest_path = manifests_dir() / f"{run_id}.json"
-    if manifest_path.is_file():
-        store.record_run(
-            json.loads(manifest_path.read_text(encoding="utf-8")), run_id, platform
-        )
+    manifest = (
+        json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest_path.is_file()
+        else {"run_id": run_id, "platform": platform, "status": "unknown"}
+    )
+    store.record_run(manifest, run_id, platform)
     return stats
 
 

@@ -1,0 +1,59 @@
+name: Source accessibility probe
+
+# EXPERIMENTAL — dispatch-only. Verifies whether GitHub's runners can reach
+# the Iranian sources at all (they may block foreign/datacenter IPs). One
+# small page per platform; results are reported honestly. Nothing is pushed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Comma-separated platform keys"
+        default: "bama,sheypoor,hamrah_mechanic"
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: probe-sources
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Probe one page per platform
+        run: |
+          platforms=$(echo "${{ inputs.platforms }}" | tr ',' ' ')
+          overall=0
+          for p in $platforms; do
+            echo "::group::probe: $p"
+            if uv run python scripts/collect.py --platform "$p" --mode ci \
+                --max-pages 1 --target-listings 24; then
+              echo "$p: OK"
+            else
+              echo "$p: FAILED (exit code $?) — source likely unreachable/blocked from Actions runners"
+              overall=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $overall
+
+      - name: Upload probe manifests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-manifests
+          path: data/manifests/*.json
+          if-no-files-found: warn
+          retention-days: 30

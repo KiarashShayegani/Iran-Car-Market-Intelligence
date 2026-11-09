@@ -5,6 +5,9 @@ description = "Iranian Car Market Intelligence — multi-source market data, sem
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
 dependencies = [
+    "boto3>=1.43.126",
+    "pandas>=2.2",
+    "pyarrow>=17",
     "pydantic>=2.7",
     "pyyaml>=6.0.1",
     "requests>=2.32",

@@ -61,9 +61,13 @@ the `UV_DEFAULT_INDEX` mirror line. That choice stays on your machine and is
 never committed.
 
 Everything (virtualenv, package cache, datasets, model caches) lives inside
-the repository directory. Copying the repository directory to another machine
-is sufficient; then run the sync command and
-`uv run python scripts/sync_latest_data.py` to fetch the latest data layer.
+the repository directory — the data layer is **local-first**: raw JSON/JSONL,
+canonical SQLite, analytical Parquet, manifests, and (later) retrieval indexes
+are all repo-local files. Copying the repository directory to another machine
+is sufficient. GitHub Actions runs the same pipeline experimentally (dispatch
+only): it delivers results as downloadable artifacts, which
+`python scripts/sync_latest_data.py --source <artifact.zip>` imports locally —
+the local canonical DB stays authoritative and ingestion is idempotent.
 
 ## License
 

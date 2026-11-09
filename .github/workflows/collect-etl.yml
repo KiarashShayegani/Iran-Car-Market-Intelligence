@@ -1,0 +1,109 @@
+name: Collect + ETL (experimental)
+
+# EXPERIMENTAL — dispatch-only, dormant. Intended to eventually carry the
+# heavy pipeline (scrape → ingest → analytical export) off the local machine,
+# IF the sources prove reachable from Actions runners (see probe-sources.yml).
+#
+# The artifact delivers raw runs + manifests + analytical Parquet (+ a runner
+# convenience DB). The LOCAL canonical SQLite remains the only authoritative
+# store: import artifacts with scripts/sync_latest_data.py, which ingests the
+# raw runs locally (idempotent, run-level fast path, cross-run dedup).
+# GitHub is never treated as permanent data storage; artifacts are temporary.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Comma-separated platform keys"
+        default: "bama,sheypoor,hamrah_mechanic"
+        type: string
+      max_pages:
+        description: "Max pages per platform"
+        default: "3"
+        type: string
+      target_listings:
+        description: "Target unique listings per platform"
+        default: "72"
+        type: string
+      include_raw:
+        description: "Include raw runs in the artifact"
+        default: "true"
+        type: boolean
+  # schedule:                    # DORMANT — enable only after the probe is
+  #   - cron: "0 2 * * *"       # verified and the owner approves scheduling
+
+permissions:
+  contents: write  # manifest commits only; datasets never enter git
+
+concurrency:
+  group: collect-etl
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # safe pushes from the runner
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Collect (per platform; failures isolated and reported)
+        run: |
+          platforms=$(echo "${{ inputs.platforms }}" | tr ',' ' ')
+          overall=0
+          for p in $platforms; do
+            echo "::group::collect: $p"
+            if ! uv run python scripts/collect.py --platform "$p" --mode ci \
+                --max-pages "${{ inputs.max_pages }}" \
+                --target-listings "${{ inputs.target_listings }}"; then
+              echo "$p: collection FAILED — continuing with other platforms"
+              overall=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $overall
+
+      - name: Ingest collected runs (runner-local canonical DB)
+        run: |
+          for run_dir in data/raw/*/; do
+            run_id=$(basename "$run_dir")
+            uv run python scripts/ingest.py --run-id "$run_id" || echo "$run_id: ingest FAILED — reported in manifest"
+          done
+
+      - name: Analytical Parquet export
+        run: uv run python scripts/export_analytics.py
+
+      - name: Record run manifests into git (datasets never enter git)
+        run: |
+          uv run python scripts/record_manifest.py --all
+          git config user.name "icmi-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add manifests/
+          if git diff --staged --quiet; then
+            echo "No new manifests to commit"
+          else
+            git commit -m "collection manifests (run $GITHUB_RUN_ID)"
+            git push
+          fi
+
+      - name: Publish snapshot for artifact transfer
+        run: |
+          args=""
+          if [ "${{ inputs.include_raw }}" = "true" ]; then args="--include-raw"; fi
+          uv run python scripts/publish_data.py $args --zip
+
+      - name: Upload snapshot artifact (temporary transfer channel)
+        uses: actions/upload-artifact@v4
+        with:
+          name: icmi-snapshot-${{ github.run_id }}
+          path: data/exports/*.zip
+          if-no-files-found: warn
+          retention-days: 30

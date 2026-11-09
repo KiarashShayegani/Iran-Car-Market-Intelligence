@@ -13,6 +13,7 @@ import random
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -258,8 +259,18 @@ class BaseCollector(ABC):
         self.writer.write_records(raw_entries)
         manifest = self._build_manifest(started_at, records, duplicates)
         manifest_path = self.writer.write_manifest(manifest.model_dump(mode="json"))
-        manifest.outputs["manifest_path"] = str(manifest_path)
+        manifest.outputs["manifest_path"] = self._repo_relative(manifest_path)
         return CollectorResult(manifest=manifest, records=records)
+
+    @staticmethod
+    def _repo_relative(path: Path) -> str:
+        """Repo-relative string (machine-specific absolute paths stay out of git)."""
+        from icmi.core.paths import repo_root
+
+        try:
+            return str(path.resolve().relative_to(repo_root()))
+        except ValueError:
+            return str(path)
 
     def _build_manifest(
         self,
@@ -291,7 +302,7 @@ class BaseCollector(ABC):
             failed_requests=self.failed_requests,
             quality=quality,
             outputs={
-                "raw_dir": str(self.writer.raw_dir_path),
+                "raw_dir": self._repo_relative(self.writer.raw_dir_path),
             },
         )
         return manifest

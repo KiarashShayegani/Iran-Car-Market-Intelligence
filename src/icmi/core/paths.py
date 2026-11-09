@@ -20,7 +20,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-DATA_SUBDIRS = ("raw", "canonical", "index", "manifests", "models")
+DATA_SUBDIRS = ("raw", "canonical", "analytical", "index", "manifests", "models")
 
 
 def repo_root() -> Path:
@@ -45,6 +45,11 @@ def _subdir(name: str) -> Path:
 def raw_dir() -> Path:
     """Raw, immutable source payloads, partitioned per run."""
     return _subdir("raw")
+
+
+def analytical_dir() -> Path:
+    """Derived analytical datasets (Parquet exports of the canonical layer)."""
+    return _subdir("analytical")
 
 
 def canonical_dir() -> Path:

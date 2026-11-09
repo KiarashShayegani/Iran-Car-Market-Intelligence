@@ -76,6 +76,11 @@ sources:
       normalization to integer happens downstream, raw is preserved.
       seller_type/seller_id appear only on featured ads (rare);
       years may be Gregorian for imported vehicles (preserved raw).
+      VERIFIED 2026-11-09: the UNFILTERED default feed ROTATES — two runs of
+      the same pageIndex=0 ~1.5h apart shared ZERO listing IDs. The default
+      feed is not a stable enumeration basis for market coverage; real
+      coverage requires query-based collections (the API accepts a `vehicle`
+      param, proven by the v2 scraper). Use collection presets for that.
 
   sheypoor:
     display_name: Sheypoor

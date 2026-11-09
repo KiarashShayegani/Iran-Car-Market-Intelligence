@@ -36,6 +36,7 @@ class IngestStats:
     price_observations_appended: int = 0
     price_change_events: int = 0  # observations appended due to a real change
     records_without_id: int = 0
+    skipped_runs: int = 0
     details: list[str] = field(default_factory=list)
 
 
@@ -362,6 +363,23 @@ class CanonicalStore:
         )
 
     # --- queries (used by tests, sync, and later the API) ---------------------
+
+    def query_df(self, sql: str, params: tuple | None = None):
+        """Run a read-only query and return a pandas DataFrame."""
+        import pandas as pd
+
+        return pd.read_sql_query(sql, self._conn, params=params or ())
+
+    def has_run(self, run_id: str) -> bool:
+        """Whether a run is already recorded as ingested (fast-path skip)."""
+        row = self._conn.execute(
+            "SELECT 1 FROM runs WHERE run_id = ?", (run_id,)
+        ).fetchone()
+        return row is not None
+
+    def ingested_run_ids(self) -> list[str]:
+        rows = self._conn.execute("SELECT run_id FROM runs ORDER BY run_id").fetchall()
+        return [r["run_id"] for r in rows]
 
     def listing_count(self, platform: str | None = None) -> int:
         if platform:
