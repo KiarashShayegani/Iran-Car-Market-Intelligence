@@ -1,0 +1,92 @@
+# ICMI source configuration.
+#
+# Every collector is fully defined here — endpoints, pagination behavior,
+# rate limits, and field support. Endpoints marked `status: experimental` are
+# findings from hands-on investigation (see docs/research/), NOT guaranteed
+# API contracts. Collectors must verify current behavior before relying on
+# them, and treat any structural change as an extraction failure, not a crash.
+#
+# field_support declares which canonical fields a platform is known to be able
+# to provide at all. Fields absent here are `not_supported_by_platform` in
+# quality reports; fields listed here but empty on a given ad are
+# `missing_in_ad`.
+
+schema_version: 1
+
+pipeline:
+  # Bumped whenever extraction logic changes; stored on every record/manifest.
+  extraction_version: icmi-v3-extraction-0
+  request_timeout_seconds: 30
+  request_delay_seconds: 2.0
+  request_jitter_seconds: 1.0
+  max_retries: 3
+  user_agent: >-
+    Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+    (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36
+
+sources:
+  bama:
+    display_name: Bama
+    display_name_fa: باما
+    enabled: true
+    status: experimental
+    base_url: https://bama.ir/cad/api/search
+    pagination:
+      type: page_index
+      page_param: pageIndex
+      page_size: 12
+      page_size_param: pageSize
+    notes: >-
+      Search API returns JSON with type=='ad' nodes carrying a `detail` object.
+      Public listing URL from detail.url (relative) or metadata.canonical.
+      pageIndex is zero-based.
+
+  sheypoor:
+    display_name: Sheypoor
+    display_name_fa: شیپور
+    enabled: true
+    status: experimental
+    base_url: https://www.sheypoor.com/api/v10.0.0/search/iran/car
+    pagination:
+      type: cursor
+      page_param: p
+      page_size: 24
+    notes: >-
+      Cursor comes from response metadata `f`; incrementing `p` blindly repeats
+      records. Listing URL from attributes.url.
+
+  hamrah_mechanic:
+    display_name: Hamrah Mechanic
+    display_name_fa: همراه مکانیک
+    enabled: true
+    status: experimental
+    base_url: https://www.hamrah-mechanic.com/api/v1/common/newexhibition
+    pagination:
+      type: page_number
+      page_param: page
+      page_size: 24
+    notes: >-
+      Dealer exhibition inventory, not classifieds. Public URL from
+      exhibitionDetailUrl path on hamrah-mechanic.com. No description field in
+      inventory responses. Start page still needs verification.
+
+  divar:
+    display_name: Divar
+    display_name_fa: دیوار
+    enabled: false
+    status: deferred_blocked
+    base_url: https://api.divar.ir/v8/postlist/w/search
+    notes: >-
+      HTTP 403 on direct GET/POST investigation. Requires a proper client
+      emulation session before it can be a collector candidate.
+
+  karnameh:
+    display_name: Karnameh
+    display_name_fa: کارنامه
+    enabled: false
+    status: deferred_identity
+    base_url: https://api-gw.karnameh.com/post-storage/car-posts/car-post-list/
+    notes: >-
+      Listing cards expose useful attributes but no stable listing UUID or
+      public page URL in the investigated responses; detail route depends on a
+      Next.js build ID. Deferred until listing identity is solved.

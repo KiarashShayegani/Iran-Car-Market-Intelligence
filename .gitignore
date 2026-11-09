@@ -1,73 +1,33 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Virtual environments
-venv/
-env/
-ENV/
+*.pyc
 .venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
 
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# uv (repo-local, isolated)
+.uv-cache/
 
-# OS files
+# Data Layer — datasets never enter git
+data/
+
+# Model weights and caches
+models/
+.hf-cache/
+
+# Internal project docs (planning, reports)
+docs/internal/
+
+# Environment / secrets
+.env
+.env.*
+
+# OS / editor
 .DS_Store
 Thumbs.db
-
-# Logs
-logs/
-*.log
-
-# Data files (raw scrapes/master history can be large)
-data/raw/*.parquet
-data/processed/*.parquet
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-
-# Skipped-ads / dropped-row diagnostic logs (grow every run, regenerable)
-data/skipped_rows.csv
-data/validation_dropped_rows.csv
-
-# Database
-data/*.db
-*.db
-
-# Artifacts (models, scalers - use Git LFS if a model exceeds ~10MB,
-# which GitHub/HF Spaces enforce without LFS)
-artifacts/models/*.joblib
-artifacts/models/*.cbm
-artifacts/scalers/*.pkl
-artifacts/metadata/*.json
-
-# Keep directory structure
-!artifacts/models/.gitkeep
-!artifacts/scalers/.gitkeep
-!artifacts/metadata/.gitkeep
-
-# CatBoost's own training-run scratch directory
-catboost_info/
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
-
-# Environment
-.env
-.env.local
-
-# pytest
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Build artifacts
-build/
-dist/
-*.egg-info/
+.idea/
+.vscode/

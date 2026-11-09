@@ -1,0 +1,11 @@
+# ICMI-local uv configuration.
+# Keeps every uv artifact (cache, virtualenv) inside the repository so the
+# project stays isolated on any machine and never writes to $HOME.
+cache-dir = ".uv-cache"
+python-preference = "only-system"
+
+# PyPI is unreachable directly from Iran; use the TUNA mirror.
+# Anyone cloning this repo gets working installs with no extra setup.
+[[index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
