@@ -31,16 +31,22 @@ All endpoints are experimental findings, not guaranteed API contracts.
 
 ## Development
 
+Use the repo-local wrapper — it keeps **all** caches and environments inside
+the repository directory and never touches machine-global caches shared with
+other projects:
+
 ```bash
-uv sync          # create .venv and install locked dependencies
-uv run pytest    # run tests
-uv run ruff check .
+scripts/dev.sh sync              # create .venv, install locked dependencies
+scripts/dev.sh run pytest        # run tests
+scripts/dev.sh run ruff check .
 ```
 
-Everything (virtualenv, caches, datasets) lives inside the repository
-directory, isolated from the rest of the system. Copying the repository
-directory to another machine (including Windows) is sufficient; then run
-`uv sync` and `uv run python scripts/sync_latest_data.py` to fetch the latest
+On Windows (PowerShell): `.\scripts\dev.ps1 sync`, etc.
+
+Everything (virtualenv, package cache, datasets, model caches) lives inside
+the repository directory, isolated from the rest of the system. Copying the
+repository directory to another machine is sufficient; then run the sync
+command and `uv run python scripts/sync_latest_data.py` to fetch the latest
 data layer.
 
 ## License
