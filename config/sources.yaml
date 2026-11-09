@@ -87,9 +87,42 @@ sources:
       type: cursor
       page_param: p
       page_size: 24
+    # Canonical fields Sheypoor is known to be able to provide (fullAttributes
+    # keys: مدل خودرو/سال تولید (چهار رقمی)/کیلومتر/نوع سوخت/گیربکس/
+    # نوع شاسی/وضعیت بدنه/رنگ). trim_raw is NOT part of Sheypoor's car
+    # attribute schema (0 occurrences across sampled ads) — still extracted
+    # if a future ad carries it.
+    field_support:
+      - source_listing_id
+      - original_url
+      - title
+      - description
+      - manufacturer_raw
+      - brand_raw
+      - model_raw
+      - year_raw
+      - mileage_raw
+      - price_raw
+      - location_raw
+      - fuel_raw
+      - transmission_raw
+      - body_type_raw
+      - body_condition_raw
+      - color_raw
+      - seller_type
+      - seller_id
+      - image_urls
+      - image_count
+      - source_published_at
     notes: >-
-      Cursor comes from response metadata `f`; incrementing `p` blindly repeats
-      records. Listing URL from attributes.url.
+      Ads are type=='normal' nodes with attributes + fullAttributes in the
+      خودرو category. Verified live (2026-11-09): a fresh chain starts WITHOUT
+      the f cursor (p=0); each response's meta.f is the cursor for the NEXT
+      page; meta.p echoes the 1-based page; total/items_per_page allow
+      has-more. Price amount is a comma-formatted STRING with currency
+      exposed (تومان); raw preserved. source_published_at is the relative
+      timePassedLabel; no absolute timestamps exposed. No trim attribute
+      exists in the car schema (verified across sampled ads 2026-11-09).
 
   hamrah_mechanic:
     display_name: Hamrah Mechanic
@@ -101,10 +134,30 @@ sources:
       type: page_number
       page_param: page
       page_size: 24
+    # Dealer exhibition inventory: no description, fuel, body type/condition,
+    # seller identity, image count, or timestamps in inventory responses.
+    field_support:
+      - source_listing_id
+      - original_url
+      - title
+      - manufacturer_raw
+      - brand_raw
+      - model_raw
+      - trim_raw
+      - year_raw
+      - mileage_raw
+      - price_raw
+      - location_raw
+      - transmission_raw
+      - color_raw
+      - image_urls
     notes: >-
-      Dealer exhibition inventory, not classifieds. Public URL from
-      exhibitionDetailUrl path on hamrah-mechanic.com. No description field in
-      inventory responses. Start page still needs verification.
+      Records: orderId + carNamePersian; sold vehicles skipped and counted.
+      Verified live (2026-11-09): page is 1-BASED and page 1 is the true
+      first page (zero overlap with page 2) — the notebook's start-at-2 was
+      unnecessary. Public URL built from exhibitionDetailUrl path.
+      model_raw is modelEnglishName only (deliberate deviation from the
+      notebook, which fell back to the full Persian title).
 
   divar:
     display_name: Divar

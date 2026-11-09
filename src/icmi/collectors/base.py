@@ -110,6 +110,13 @@ class BaseCollector(ABC):
     def parse_listing(self, ad: dict, payload_ref: RawPayloadRef) -> CanonicalRecord | None:
         """Map one raw ad payload to a canonical record (None = skip, with reason)."""
 
+    def observe_page(self, page_payload: dict) -> None:
+        """Hook: inspect a fetched page (e.g. capture the next pagination cursor).
+
+        Called once per successfully fetched page, before extraction.
+        """
+        return None
+
     def has_more(self, page_payload: dict) -> bool:
         """Whether the source indicates more pages after this one.
 
@@ -176,15 +183,9 @@ class BaseCollector(ABC):
                 self.failed_requests.append(f"page {page_index}: {type(exc).__name__}: {exc}")
                 continue
 
+            self.observe_page(payload)
             ads = self.iter_ads(payload)
-            if not ads:
-                self.pages["empty"] += 1
-                consecutive_empty += 1
-                if consecutive_empty >= 3:
-                    break
-                self._polite_wait()
-                continue
-            consecutive_empty = 0
+            new_before = len(records)
 
             for ad in ads:
                 listing_id = self.listing_id_of(ad)
@@ -205,14 +206,30 @@ class BaseCollector(ABC):
                 )
                 record = self.parse_listing(ad, ref)
                 if record is None:
-                    self.skip_reasons["unparseable_ad"] = (
-                        self.skip_reasons.get("unparseable_ad", 0) + 1
+                    self.skip_reasons["skipped_records"] = (
+                        self.skip_reasons.get("skipped_records", 0) + 1
                     )
                     continue
                 records.append(record)
                 raw_entries.append({"source_listing_id": listing_id, "raw_payload": ad})
                 if len(records) >= target_listings:
                     break
+
+            # A page yielding zero NEW records is stale (repeated result set,
+            # e.g. a broken cursor chain); it counts toward the same stop
+            # threshold as empty pages.
+            if len(records) == new_before:
+                if ads:
+                    self.pages["stale"] = self.pages.get("stale", 0) + 1
+                else:
+                    self.pages["empty"] += 1
+                consecutive_empty += 1
+                if consecutive_empty >= 3:
+                    break
+                self._polite_wait()
+                continue
+            consecutive_empty = 0
+
             if len(records) >= target_listings:
                 break
             if not self.has_more(payload):

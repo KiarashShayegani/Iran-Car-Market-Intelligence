@@ -8,9 +8,13 @@ from __future__ import annotations
 
 from icmi.collectors.bama import BamaCollector
 from icmi.collectors.base import BaseCollector
+from icmi.collectors.hamrah_mechanic import HamrahMechanicCollector
+from icmi.collectors.sheypoor import SheypoorCollector
 
 COLLECTORS: dict[str, type[BaseCollector]] = {
     BamaCollector.source_key: BamaCollector,
+    SheypoorCollector.source_key: SheypoorCollector,
+    HamrahMechanicCollector.source_key: HamrahMechanicCollector,
 }
 
 
