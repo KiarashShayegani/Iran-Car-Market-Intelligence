@@ -14,6 +14,7 @@ export interface SearchResultItem {
   chunk_count: number;
   brand_raw: string | null;
   model_raw: string | null;
+  trim_raw?: string | null;
   year_num: number | null;
   year_calendar: string | null;
   price_amount: number | null;
@@ -89,6 +90,7 @@ export interface StatsApiResponse {
   overview: Record<string, string | number>[];
   by_brand: Record<string, string | number>[];
   by_year: Record<string, string | number>[];
+  by_mileage: Record<string, string | number>[];
 }
 
 export interface ListingDetail {
@@ -303,4 +305,57 @@ export function formatToman(amount: number | null): string {
   if (b >= 0.1) return `${new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 2 }).format(b)} میلیارد تومان`;
   const m = amount / 1_000_000;
   return `${new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 0 }).format(m)} میلیون تومان`;
+}
+
+
+export interface CompareVehicle {
+  listing: ListingDetail & Record<string, unknown>;
+  image_url: string | null;
+  market_range: {
+    count: number;
+    median: number | null;
+    p25: number | null;
+    p75: number | null;
+    quality: string;
+    quality_note: string;
+  };
+}
+
+export interface CompareApiResponse {
+  vehicles: CompareVehicle[];
+}
+
+export async function fetchCompare(keys: string[]): Promise<CompareApiResponse> {
+  const res = await fetch(`${API_BASE}/compare?keys=${keys.join(",")}`);
+  if (!res.ok) {
+    const detail = (await res.json())?.detail;
+    throw new Error(detail || `خطای مقایسه (${res.status})`);
+  }
+  return res.json();
+}
+
+/* --- compare selection (localStorage, max 3) --- */
+const COMPARE_KEY = "icmi-compare-keys";
+
+export function getCompareKeys(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(COMPARE_KEY) ?? "[]") as string[];
+  } catch {
+    return [];
+  }
+}
+
+export function toggleCompareKey(key: string): string[] {
+  const current = getCompareKeys();
+  const next = current.includes(key)
+    ? current.filter((k) => k !== key)
+    : [...current, key].slice(-3);
+  localStorage.setItem(COMPARE_KEY, JSON.stringify(next));
+  window.dispatchEvent(new Event("icmi-compare-change"));
+  return next;
+}
+
+export function clearCompareKeys(): void {
+  localStorage.removeItem(COMPARE_KEY);
+  window.dispatchEvent(new Event("icmi-compare-change"));
 }

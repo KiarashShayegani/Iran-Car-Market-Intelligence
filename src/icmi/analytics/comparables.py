@@ -66,6 +66,7 @@ def estimate_market_range(
     year: int | str | None = None,
     mileage_km: int | None = None,
     max_comparables: int = 8,
+    trim_outliers: bool = False,
 ) -> EstimateResult:
     """Estimate the observed market range for a vehicle description.
 
@@ -120,7 +121,12 @@ def estimate_market_range(
     def _int_or_none(value) -> int | None:
         if value is None:
             return None
-        return int(value)
+        try:
+            if value != value:  # NaN (pandas null in mixed int columns)
+                return None
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
     comparables = [
         Comparable(
@@ -165,6 +171,18 @@ def estimate_market_range(
     def percentile(p: float) -> int:
         idx = min(int(round(p * (count - 1))), count - 1)
         return prices[idx]
+
+    if trim_outliers and count >= 6:
+        # IQR-based trimming inside the comparable pool (documented,
+        # optional): at least 6 samples required so trimming never eats a
+        # small honest sample.
+        q1, q3 = percentile(0.25), percentile(0.75)
+        iqr = q3 - q1
+        lo, hi = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+        trimmed = [p for p in prices if lo <= p <= hi]
+        if len(trimmed) >= 4:  # never trim into meaninglessness
+            prices = trimmed
+            count = len(prices)
 
     median = percentile(0.5)
     p25, p75 = percentile(0.25), percentile(0.75)

@@ -23,6 +23,23 @@ from icmi.pipeline.normalize import (
 )
 from icmi.pipeline.store import CanonicalStore
 
+MILEAGE_BUCKETS = [
+    ("0-30k", 0, 30_000),
+    ("30-60k", 30_000, 60_000),
+    ("60-100k", 60_000, 100_000),
+    ("100-150k", 100_000, 150_000),
+    ("150k+", 150_000, float("inf")),
+]
+
+
+def _mileage_bucket(km) -> str | None:
+    if km is None or km != km:
+        return None
+    for label, lo, hi in MILEAGE_BUCKETS:
+        if lo <= km < hi:
+            return label
+    return None
+
 
 def market_stats(store: CanonicalStore) -> dict:
     """Compute market aggregates from the canonical layer.
@@ -87,7 +104,22 @@ def market_stats(store: CanonicalStore) -> dict:
         .sort_values(["source_platform", "year_num"])
     )
 
-    return {"overview": overview, "by_brand": by_brand, "by_year": by_year, "meta": meta}
+    # mileage distribution (documented buckets; unknown-mileage ads excluded)
+    valid_mileage = valid_price[valid_price["mileage_km"].notna()].copy()
+    valid_mileage["mileage_bucket"] = valid_mileage["mileage_km"].map(_mileage_bucket)
+    by_mileage = (
+        valid_mileage.groupby(["source_platform", "mileage_bucket"])["price_amount"]
+        .agg(count="count", median="median")
+        .reset_index()
+    )
+
+    return {
+        "overview": overview,
+        "by_brand": by_brand,
+        "by_year": by_year,
+        "by_mileage": by_mileage,
+        "meta": meta,
+    }
 
 
 def write_market_stats(store: CanonicalStore, out_dir: Path) -> dict[str, Path]:

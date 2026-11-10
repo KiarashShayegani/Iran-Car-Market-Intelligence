@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import CompareBar from "@/components/CompareBar";
 import Nav from "@/components/Nav";
 import "./globals.css";
 
@@ -51,6 +52,7 @@ export default function RootLayout({
           </div>
         </header>
         <main className="mx-auto max-w-5xl px-4 py-5">{children}</main>
+        <CompareBar />
         <footer
           className="border-t py-5 text-center text-xs"
           style={{ color: "var(--muted)", borderColor: "var(--border)" }}

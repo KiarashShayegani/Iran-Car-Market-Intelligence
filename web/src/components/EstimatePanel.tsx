@@ -42,6 +42,7 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
   const [model, setModel] = useState("");
   const [year, setYear] = useState("");
   const [mileage, setMileage] = useState("");
+  const [trimOutliers, setTrimOutliers] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<EstimateResponse | null>(null);
@@ -58,6 +59,7 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
       if (model.trim()) p.set("model", model.trim());
       if (year.trim()) p.set("year", year.trim());
       if (mileage.trim()) p.set("mileage_km", mileage.trim());
+      if (trimOutliers) p.set("trim_outliers", "true");
       const res = await fetch(`${API_BASE}/estimate?${p.toString()}`);
       if (!res.ok) throw new Error(`خطای تخمین (${res.status})`);
       setResult(await res.json());
@@ -86,11 +88,25 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
           <input type="number" value={mileage} onChange={(e) => setMileage(e.target.value)}
             placeholder="کارکرد (45000)" />
         </div>
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <label className="flex items-center gap-2 text-xs" style={{ color: "var(--muted)" }}>
+            <input
+              type="checkbox"
+              checked={trimOutliers}
+              onChange={(e) => setTrimOutliers(e.target.checked)}
+              className="!w-auto"
+            />
+            حذف قیمت‌های پرت (IQR — فقط با ۶ نمونه یا بیشتر)
+          </label>
           <button className="btn" onClick={submit} disabled={loading || !brand.trim()}>
             {loading ? "…" : "تخمین بازار"}
           </button>
         </div>
+        <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
+          معیار انتخاب مشابه‌ها: همان برند (+مدل اگر وارد شود)، سال در بازهٔ ±۲
+          از تقویم واحد، کارکرد در بازهٔ ±۳۰هزار کیلومتر — همه از دادهٔ واقعی
+          آگهی‌ها.
+        </p>
       </div>
 
       {error && (

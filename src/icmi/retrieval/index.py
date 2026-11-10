@@ -46,6 +46,7 @@ class IndexedChunk:
     document_version: str
     brand_raw: str | None
     model_raw: str | None
+    trim_raw: str | None
     brand_key: str  # normalize_for_key(brand_raw) — filter matching key
     model_key: str
     year_num: int | None
@@ -63,7 +64,8 @@ def _metadata_frame(store) -> pd.DataFrame:
         """
         SELECT listing_key, original_url, raw_payload_ref_json, extraction_version,
                brand_raw, model_raw, year_raw, mileage_raw, price_amount, location_raw,
-               brand_key, model_key, year_num, year_calendar, mileage_km, image_urls_json
+               brand_key, model_key, year_num, year_calendar, mileage_km,
+               image_urls_json, trim_raw
         FROM listings
         """
     )
@@ -93,6 +95,7 @@ def build_index_metadata(store) -> list[IndexedChunk]:
                 document_version=doc.document_version,
                 brand_raw=listing["brand_raw"],
                 model_raw=listing["model_raw"],
+                trim_raw=listing["trim_raw"],
                 brand_key=listing["brand_key"],
                 model_key=listing["model_key"],
                 year_num=listing["year_num"],

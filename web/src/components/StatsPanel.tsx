@@ -85,6 +85,49 @@ export default function StatsPanel() {
       </div>
 
       <div className="card p-4">
+        <h3 className="font-semibold text-sm mb-3">توزیع آگهی به تفکیک منبع</h3>
+        <div className="space-y-2">
+          {stats.overview.map((row) => {
+            const total = stats.overview.reduce((sum, r) => sum + Number(r.count), 0) || 1;
+            const width = Math.max((Number(row.count) / total) * 100, 4);
+            return (
+              <div key={String(row.source_platform)} className="flex items-center gap-2 text-xs">
+                <span className="w-24">{PLATFORM_LABELS[String(row.source_platform)] ?? row.source_platform}</span>
+                <div className="h-4 rounded" style={{ width: `${width}%`, background: "var(--accent)", opacity: 0.75 }} />
+                <span className="num">{formatNumber(Number(row.count))}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="card p-4">
+        <h3 className="font-semibold text-sm mb-3">میانه قیمت بر اساس کارکرد</h3>
+        <div className="space-y-2">
+          {stats.by_mileage.slice(0, 8).map((row, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <span className="w-16">{String(row.mileage_bucket)}</span>
+              <div
+                className="h-4 rounded"
+                style={{
+                  width: `${Math.max((Number(row.count) / Math.max(...stats.by_mileage.map((r) => Number(r.count)))) * 100, 4)}%`,
+                  background: "#e0e7ff",
+                }}
+              />
+              <span className="num" style={{ color: "var(--muted)" }}>
+                {formatNumber(Number(row.count))} آگهی · میانه {formatNumber(Number(row.median))} تومان
+              </span>
+            </div>
+          ))}
+          {stats.by_mileage.length === 0 && (
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              هنوز دادهٔ کارکرد قابل‌گروه‌بندی موجود نیست.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="card p-4">
         <h3 className="font-semibold text-sm mb-3">
           میانه قیمت بر اساس سال تولید (تقویم‌ها جداگانه — هرگز ترکیب نمی‌شوند)
         </h3>

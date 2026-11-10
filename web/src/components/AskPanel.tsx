@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   AskApiResponse,
   Citation,
@@ -83,7 +85,9 @@ export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: Filter
               است، نه حدس.
             </div>
           )}
-          <div className="card p-4 answer-text text-sm">{answer.answer}</div>
+          <div className="card p-4 answer-text text-sm prose-sm">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer.answer}</ReactMarkdown>
+          </div>
           <div className="mt-3">
             <p className="text-xs mb-2" style={{ color: "var(--muted)" }}>
               منابع استنادشده ({answer.citations.length} از {answer.evidence_count} شاهد):

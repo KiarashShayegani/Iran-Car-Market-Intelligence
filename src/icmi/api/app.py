@@ -212,6 +212,57 @@ def create_app(
             },
         }
 
+    @app.get("/compare")
+    def compare(
+        keys: str = Query(min_length=1), limit: int = Query(default=6, ge=1, le=20)
+    ) -> dict:
+        """Side-by-side comparison of 2-3 listings, each with its own
+        retrieval-based market range (auditable, from comparables)."""
+        key_list = [k.strip() for k in keys.split(",") if k.strip()]
+        if len(key_list) < 2 or len(key_list) > 3:
+            raise HTTPException(status_code=400, detail="compare needs 2-3 listing keys")
+        store = get_store()
+        vehicles = []
+        for key in key_list:
+            df = store.query_df(
+                """
+                SELECT listing_key, source_platform, original_url, title, brand_raw,
+                       model_raw, trim_raw, year_raw, year_calendar, mileage_raw,
+                       mileage_km, price_raw, price_amount, price_currency_raw,
+                       location_raw, fuel_raw, transmission_raw, body_type_raw,
+                       body_condition_raw, color_raw, image_urls_json, description,
+                       first_seen_at
+                FROM listings WHERE listing_key = ?
+                """,
+                (key,),
+            )
+            if df.empty:
+                raise HTTPException(status_code=404, detail=f"not found: {key}")
+            row = df.iloc[0]
+            estimate = estimate_market_range(
+                store,
+                brand=row["brand_raw"] or "",
+                model=row["model_raw"],
+                year=row["year_raw"],
+                mileage_km=_int_safe(row["mileage_km"]),
+                trim_outliers=False,
+            )
+            vehicles.append(
+                {
+                    "listing": _jsonable(row.to_dict()),
+                    "image_url": _first_image(row["image_urls_json"]),
+                    "market_range": {
+                        "count": estimate.count,
+                        "median": estimate.median,
+                        "p25": estimate.p25,
+                        "p75": estimate.p75,
+                        "quality": estimate.quality,
+                        "quality_note": estimate.quality_note,
+                    },
+                }
+            )
+        return {"vehicles": vehicles}
+
     @app.get("/ops-status")
     def ops_status() -> dict:
         """Operational health: collection runs, DB, index freshness, backups."""
@@ -266,6 +317,7 @@ def create_app(
                     "chunk_count": r.chunk_count,
                     "brand_raw": None if meta is None else _nan_safe(meta["brand_raw"]),
                     "model_raw": None if meta is None else _nan_safe(meta["model_raw"]),
+                    "trim_raw": None if meta is None else _nan_safe(meta["trim_raw"]),
                     "year_num": None if meta is None else _int_safe(meta["year_num"]),
                     "year_calendar": None if meta is None else _nan_safe(meta["year_calendar"]),
                     "price_amount": None if meta is None else _int_safe(meta["price_amount"]),
@@ -293,10 +345,16 @@ def create_app(
         model: str | None = None,
         year: str | None = None,
         mileage_km: int | None = None,
+        trim_outliers: bool = Query(default=False),
     ) -> dict:
         """Observed market range from comparable ads (retrieval-based, no ML)."""
         result = estimate_market_range(
-            get_store(), brand=brand, model=model, year=year, mileage_km=mileage_km
+            get_store(),
+            brand=brand,
+            model=model,
+            year=year,
+            mileage_km=mileage_km,
+            trim_outliers=trim_outliers,
         )
         return {
             **result.__dict__,
@@ -383,6 +441,7 @@ def create_app(
             "overview": result["overview"].to_dict(orient="records"),
             "by_brand": result["by_brand"].to_dict(orient="records"),
             "by_year": result["by_year"].to_dict(orient="records"),
+            "by_mileage": result["by_mileage"].to_dict(orient="records"),
         }
 
     @app.post("/ask")

@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, Sparkles, Banknote, BarChart3 } from "lucide-react";
+import { Search, Sparkles, Banknote, BarChart3, GitCompare } from "lucide-react";
 
 const LINKS = [
   { href: "/", label: "خانه", icon: null },
   { href: "/search", label: "جستجو", icon: Search },
   { href: "/ask", label: "پرسش هوشمند", icon: Sparkles },
   { href: "/estimate", label: "تخمین قیمت", icon: Banknote },
+  { href: "/compare", label: "مقایسه", icon: GitCompare },
   { href: "/stats", label: "داشبورد", icon: BarChart3 },
 ];
 
