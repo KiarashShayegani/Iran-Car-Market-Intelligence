@@ -35,6 +35,36 @@ FETCH_TIMEOUT_SECONDS = 20
 MAX_IMAGE_BYTES = 15 * 1024 * 1024  # generous cap; largest observed ~270 KB
 
 
+def _default_resolve(hostname: str) -> str | None:
+    """DNS/IP guard (final G3 verification, owner-reviewed): resolve the
+    allowlisted hostname and reject if ANY address is private, loopback,
+    link-local, reserved, multicast, or unspecified — so a compromised or
+    rebinding DNS record cannot turn the proxy into an internal-network
+    fetcher. Returns a reason string, or None when safe."""
+    import ipaddress
+    import socket
+
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return "dns_resolution_failed"
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            return f"resolves_to_disallowed_address ({ip})"
+    return None
+
+
 class ImageProxyError(Exception):
     """Raised when an image cannot be served.
 
@@ -62,6 +92,7 @@ class ImageCache:
         root: Path | None = None,
         fetcher=None,
         now=None,
+        resolver=None,
     ) -> None:
         self.allow_hosts = {h.lower() for h in allow_hosts}
         self.max_bytes = max_cache_mb * 1024 * 1024
@@ -69,6 +100,7 @@ class ImageCache:
         self.root = root or image_cache_dir()
         self.root.mkdir(parents=True, exist_ok=True)
         self._fetcher = fetcher or self._default_fetch
+        self._resolver = resolver or _default_resolve
         self._now = now or time.time
         self._last_sweep = 0.0
 
@@ -80,6 +112,11 @@ class ImageCache:
         if host is None:
             raise ImageProxyError(
                 f"host not allowed: {urlparse(url).hostname}", kind="disallowed"
+            )
+        dns_block = self._resolver(host)
+        if dns_block:
+            raise ImageProxyError(
+                f"host '{host}' {dns_block}", kind="disallowed"
             )
 
         path, meta = self._cache_paths(url)

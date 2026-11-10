@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from icmi.api.image_proxy import ImageProxyError
+from icmi.api.image_proxy import ImageCache, ImageProxyError
 from icmi.core.locking import FileLock, LockHeldError
 from icmi.pipeline.runner import PipelineRunner
 
@@ -29,18 +29,63 @@ def test_lock_second_acquirer_blocked(tmp_path):
     FileLock(tmp_path / "lock", holder="two").acquire()  # now fine
 
 
-def test_lock_stale_takeover(tmp_path):
+def _dead_pid() -> int:
+    import subprocess
+    import sys
+
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait()  # ensure it has exited
+    return proc.pid
+
+
+def test_lock_stale_takeover_requires_dead_holder(tmp_path):
+    """New policy: stale takeover requires a provably DEAD holder pid —
+    mtime age alone must never hijack a live process."""
+    import json
     import os
     import time
 
     lock1 = FileLock(tmp_path / "lock", holder="dead", stale_after_seconds=1)
     lock1.acquire()
-    # simulate age
+    meta = json.loads(lock1.path.read_text(encoding="utf-8"))
+    meta["pid"] = _dead_pid()  # holder died mid-run
+    lock1.path.write_text(json.dumps(meta), encoding="utf-8")
     old = time.time() - 7200
     os.utime(lock1.path, (old, old))
     lock2 = FileLock(tmp_path / "lock", holder="two", stale_after_seconds=3600)
-    lock2.acquire()  # stale → takeover allowed
+    lock2.acquire()  # dead holder → takeover allowed
     lock2.release()
+
+
+def test_lock_live_holder_never_hijacked_by_age(tmp_path):
+    """Owner concern: a genuinely long-running process must never lose its
+    lock to the stale rule."""
+    import os
+    import time
+
+    lock1 = FileLock(tmp_path / "lock", holder="long-runner", stale_after_seconds=1)
+    lock1.acquire()  # pid = this live test process
+    old = time.time() - 7200  # hours old
+    os.utime(lock1.path, (old, old))
+    with pytest.raises(LockHeldError, match="alive"):
+        FileLock(tmp_path / "lock", holder="two", stale_after_seconds=1).acquire()
+    lock1.release()
+
+
+def test_lock_corrupt_falls_back_to_age(tmp_path):
+    import os
+    import time
+
+    lock_path = tmp_path / "lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text("not-json", encoding="utf-8")
+    fresh = time.time()
+    os.utime(lock_path, (fresh, fresh))
+    with pytest.raises(LockHeldError):
+        FileLock(lock_path, holder="two", stale_after_seconds=3600).acquire()
+    old = time.time() - 7200
+    os.utime(lock_path, (old, old))
+    FileLock(lock_path, holder="two", stale_after_seconds=3600).acquire()
 
 
 # --- runner stages (offline; no collect) ------------------------------------------
@@ -143,4 +188,38 @@ def ImageCacheWithFetch(tmp_path, fetcher):
     return ImageCache(
         allow_hosts=["cdn.example.com"], max_cache_mb=5, ttl_days=1,
         root=tmp_path / "cache", fetcher=fetcher, now=lambda: 1000.0,
+        resolver=lambda host: None,  # safe IPs — DNS guard tested separately
     )
+
+
+def test_proxy_dns_guard_rejects_private_resolution(tmp_path):
+    """Final G3 verification: an allowlisted hostname that RESOLVES to a
+    private/loopback address is rejected — DNS-rebinding mitigation."""
+    cache = ImageCache(
+        allow_hosts=["cdn.example.com"], max_cache_mb=5, ttl_days=1,
+        root=tmp_path / "cache",
+        fetcher=lambda url: FakeResponse(b"IMG"),
+        now=lambda: 1000.0,
+        resolver=lambda host: "resolves_to_disallowed_address (127.0.0.1)",
+    )
+    with pytest.raises(ImageProxyError, match="disallowed"):
+        cache.get("https://cdn.example.com/a.jpg")
+
+
+def test_proxy_dns_guard_reports_resolution_failure(tmp_path):
+    cache = ImageCache(
+        allow_hosts=["cdn.example.com"], max_cache_mb=5, ttl_days=1,
+        root=tmp_path / "cache",
+        fetcher=lambda url: FakeResponse(b"IMG"),
+        now=lambda: 1000.0,
+        resolver=lambda host: "dns_resolution_failed",
+    )
+    with pytest.raises(ImageProxyError, match="dns_resolution_failed"):
+        cache.get("https://cdn.example.com/a.jpg")
+
+
+class FakeResponse:
+    def __init__(self, content: bytes, content_type: str = "image/webp") -> None:
+        self.status_code = 200
+        self.content = content
+        self.headers = {"content-type": content_type}

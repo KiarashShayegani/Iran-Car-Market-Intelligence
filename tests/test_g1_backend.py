@@ -49,6 +49,7 @@ def test_image_cache_fetch_store_and_serve(tmp_path):
     cache = ImageCache(
         allow_hosts=["cdn.example.com"], max_cache_mb=1, ttl_days=1,
         root=tmp_path / "cache", fetcher=fake_fetch, now=lambda: 1000.0,
+        resolver=lambda host: None,  # DNS guard tested in test_g3_ops
     )
     url = "https://cdn.example.com/a.jpg"
     first = cache.get(url)
@@ -75,6 +76,7 @@ def test_image_cache_stale_on_error(tmp_path):
     cache = ImageCache(
         allow_hosts=["cdn.example.com"], max_cache_mb=1, ttl_days=1,
         root=tmp_path / "cache", fetcher=failing_fetch, now=lambda: state["t"],
+        resolver=lambda host: None,
     )
     url = "https://cdn.example.com/a.jpg"
     # first: pretend a previous run cached it
@@ -98,6 +100,7 @@ def test_image_cache_lru_eviction(tmp_path):
     cache = ImageCache(
         allow_hosts=["cdn.example.com"], max_cache_mb=1, ttl_days=30,
         root=tmp_path / "cache", fetcher=fetch, now=lambda: current["t"],
+        resolver=lambda host: None,
     )
     for i in range(3):
         current["t"] += 1000

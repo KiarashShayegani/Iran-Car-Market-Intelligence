@@ -75,10 +75,22 @@ def publish(
             copied.append("analytical")
 
     if include_db:
+        import sqlite3
+
         db = canonical_dir() / "icmi.db"
         if db.is_file():
             (snapshot_dir / "canonical").mkdir(parents=True, exist_ok=True)
-            shutil.copy2(db, snapshot_dir / "canonical" / "icmi.db")
+            # SQLite online backup API (final G3 verification): produces a
+            # consistent snapshot even under concurrent API reads or WAL
+            # journal modes — a raw file copy could capture a torn state.
+            src = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            src.execute("PRAGMA busy_timeout=10000")
+            dst = sqlite3.connect(snapshot_dir / "canonical" / "icmi.db")
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+                src.close()
             copied.append("canonical-db")
 
     if zip_output:

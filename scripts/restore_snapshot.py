@@ -31,9 +31,26 @@ import sqlite3
 import sys
 import tempfile
 import zipfile
+from datetime import UTC
 from pathlib import Path
 
 from icmi.core.paths import data_dir
+
+
+def _validate_zip_members(zf: zipfile.ZipFile, root: Path) -> None:
+    """Defense-in-depth over Python's built-in sanitization (final G3
+    verification): reject absolute paths, '..' traversal, and any member
+    whose resolved location escapes the extraction root."""
+    root_resolved = root.resolve()
+    for name in zf.namelist():
+        if name.startswith("/") or "\\" in name.split("/")[0:1]:
+            raise ValueError(f"unsafe absolute zip member: {name}")
+        parts = Path(name).parts
+        if ".." in parts:
+            raise ValueError(f"zip traversal attempt: {name}")
+        target = (root / name).resolve()
+        if not target.is_relative_to(root_resolved):
+            raise ValueError(f"zip member escapes root: {name}")
 
 
 def _extract(source: Path, workdir: Path) -> Path:
@@ -42,6 +59,7 @@ def _extract(source: Path, workdir: Path) -> Path:
             bad = zf.testzip()
             if bad is not None:
                 raise ValueError(f"corrupt zip member: {bad}")
+            _validate_zip_members(zf, workdir)
             zf.extractall(workdir)
         return workdir
     if source.is_dir():
@@ -164,8 +182,32 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     print(f"raw run kept (exists locally): {run_dir.name}")
 
-        print("restore complete — run `scripts/dev.sh run pytest -q` and check /health")
+        report = {
+            "restored_at": stamp_iso(),
+            "source": str(source),
+            "verification": verification,
+            "steps": [
+                "canonical DB replaced (pre-restore copy archived)",
+                "manifests replaced",
+                "analytical replaced",
+                "index restored" if not args.skip_index else "index skipped (--skip-index)",
+                "raw runs merged (never overwritten)",
+            ],
+        }
+        report_path = data_root / f"restore-report-{stamp_iso()}.json"
+        report_path.write_text(json.dumps(report, indent=1), encoding="utf-8")
+        print(f"restore report: {report_path}")
+        print(
+            "restore complete — if interrupted, rerun the same command "
+            "(idempotent); the pre-restore archive is kept either way."
+        )
         return 0
+
+
+def stamp_iso() -> str:
+    from datetime import datetime
+
+    return datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%S")
 
 
 if __name__ == "__main__":
