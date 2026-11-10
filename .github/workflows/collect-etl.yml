@@ -33,7 +33,7 @@ on:
   #   - cron: "0 2 * * *"       # verified and the owner approves scheduling
 
 permissions:
-  contents: write  # manifest commits only; datasets never enter git
+  contents: read  # no git writes from runners; artifacts carry data
 
 concurrency:
   group: collect-etl
@@ -72,19 +72,9 @@ jobs:
           done
           exit $overall
 
-      - name: Record run manifests into git (datasets never enter git)
-        run: |
-          uv run python scripts/record_manifest.py --all
-          git config user.name "icmi-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add manifests/
-          if git diff --staged --quiet; then
-            echo "No new manifests to commit"
-          else
-            git commit -m "collection manifests (run $GITHUB_RUN_ID)"
-            git push
-          fi
-
+      # Manifests travel via ARTIFACTS (owner decision, G4 revision) —
+      # git is not used for data/manifest transfer. record_manifest.py
+      # remains available for optional local use only.
       - name: Publish snapshot for artifact transfer
         run: |
           args=""

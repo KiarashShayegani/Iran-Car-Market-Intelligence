@@ -1,0 +1,92 @@
+name: "G4-A1 one-page collection probe"
+
+# Experiment A1 (owner-approved): ONE page per working collector
+# (bama, sheypoor, hamrah_mechanic) + bounded connectivity status probes
+# for divar/karnameh (status codes only — they are NOT operational
+# collectors). No git push, no secrets, no LLM. Dispatch-only.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: g4-a1
+  cancel-in-progress: false
+
+jobs:
+  collect-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Environment report
+        run: |
+          mkdir -p data/g4-probe
+          {
+            echo "{"
+            echo "  \"timestamp_utc\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
+            echo "  \"cpu_cores\": $(nproc),"
+            echo "  \"memory_mb\": $(free -m | awk '/Mem:/ {print $2}')"
+            echo "}"
+          } > data/g4-probe/env.json
+
+      - name: One-page collection per platform (with wall-time)
+        run: |
+          overall=0
+          for p in bama sheypoor hamrah_mechanic; do
+            echo "::group::collect: $p"
+            START=$(date +%s)
+            if uv run python scripts/collect.py --platform "$p" --mode ci \
+                --max-pages 1 --target-listings 24; then
+              echo "$p: OK"
+            else
+              echo "$p: FAILED (exit $?)" — recorded in manifest
+              overall=1
+            fi
+            END=$(date +%s)
+            echo "{\"platform\": \"$p\", \"seconds\": $((END-START))}" >> data/g4-probe/timing.jsonl
+            echo "::endgroup::"
+          done
+          exit $overall
+
+      - name: Bounded connectivity probes (divar/karnameh — status only)
+        run: |
+          {
+            echo "{"
+            echo "  \"divar_api_get\": \"$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://api.divar.ir/v8/postlist/w/search || echo ERR)\","
+            echo "  \"divar_ssr_get\": \"$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://divar.ir/s/tehran/car || echo ERR)\","
+            echo "  \"karnameh_api_get\": \"$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 'https://api-gw.karnameh.com/post-storage/car-posts/car-post-list/?size=1' || echo ERR)\""
+            echo "}"
+          } > data/g4-probe/connectivity.json
+          cat data/g4-probe/connectivity.json
+
+      - name: Checksums
+        run: |
+          cd data
+          find . -type f ! -name "SHA256SUMS" -exec sha256sum {} \; > g4-probe/SHA256SUMS || true
+          cat g4-probe/SHA256SUMS
+
+      - name: Upload A1 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: g4-a1-collect-report
+          path: |
+            data/g4-probe/
+            data/manifests/*.json
+            data/raw/
+          retention-days: 7
+
+      - name: Summary
+        run: |
+          echo "## G4-A1 result" >> $GITHUB_STEP_SUMMARY
+          echo "- 1-page collection per platform; statuses in manifests" >> $GITHUB_STEP_SUMMARY
+          echo "- divar/karnameh connectivity recorded (status codes only)" >> $GITHUB_STEP_SUMMARY
+          echo "- artifact: g4-a1-collect-report (7-day retention)" >> $GITHUB_STEP_SUMMARY

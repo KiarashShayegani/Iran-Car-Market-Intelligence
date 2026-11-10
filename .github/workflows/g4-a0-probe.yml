@@ -1,0 +1,73 @@
+name: "G4-A0 environment & artifact probe"
+
+# Experiment A0 (owner-approved): runner environment + artifact mechanics.
+# NO collection, NO git push, NO secrets, NO LLM. Dispatch-only.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: g4-a0
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Environment report
+        run: |
+          mkdir -p data/g4-probe
+          {
+            echo "{"
+            echo "  \"timestamp_utc\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
+            echo "  \"runner\": {"
+            echo "    \"hostname\": \"$(hostname)\","
+            echo "    \"kernel\": \"$(uname -sr)\","
+            echo "    \"cpu_cores\": $(nproc),"
+            echo "    \"memory_mb\": $(free -m | awk '/Mem:/ {print $2}'),"
+            echo "    \"disk_free_mb\": $(df -BM / | awk 'NR==2 {print substr($4, 1, length($4)-1)}')"
+            echo "  },"
+            echo "  \"python\": \"$(python3 --version)\""
+            echo "}"
+          } > data/g4-probe/env.json
+          cat data/g4-probe/env.json
+          echo "egress ip info:" >> data/g4-probe/env-notes.txt
+          curl -s --max-time 15 https://ipinfo.io/json >> data/g4-probe/env-notes.txt || echo "ipinfo unreachable" >> data/g4-probe/env-notes.txt
+
+      - name: Dependency install timing
+        run: |
+          START=$(date +%s)
+          uv sync
+          END=$(date +%s)
+          echo "{\"uv_sync_seconds\": $((END-START))}" > data/g4-probe/timing.json
+          cat data/g4-probe/timing.json
+
+      - name: Artifact mechanics probe (5 MB payload + checksums)
+        run: |
+          head -c 5242880 /dev/urandom > data/g4-probe/payload_5mb.bin
+          sha256sum data/g4-probe/payload_5mb.bin > data/g4-probe/SHA256SUMS
+          sha256sum data/g4-probe/env.json >> data/g4-probe/SHA256SUMS
+
+      - name: Upload probe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: g4-a0-report
+          path: data/g4-probe/
+          retention-days: 7
+
+      - name: Summary
+        run: |
+          echo "## G4-A0 probe result" >> $GITHUB_STEP_SUMMARY
+          echo "- env + timing + artifact mechanics verified" >> $GITHUB_STEP_SUMMARY
+          echo "- artifact: g4-a0-report (7-day retention)" >> $GITHUB_STEP_SUMMARY
