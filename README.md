@@ -23,10 +23,10 @@ operations guide. In short — two terminals:
 
 ```bash
 # Terminal 1 — API (search / stats / estimate / ask)
-scripts/dev.sh run python scripts/run_api.py          # http://127.0.0.1:8000 (/docs)
+uv run uvicorn icmi.api.app:app --reload --port 8000   # http://127.0.0.1:8000 (/docs)
 
 # Terminal 2 — web app
-cd web && npm install && npm run dev                   # http://localhost:3000
+cd web && npm install && npm run dev                    # http://localhost:3000
 ```
 
 Optional: start the LLM proxy (`litellm-start`) for the «پرسش هوشمند» tab —

@@ -34,6 +34,10 @@ packages = ["src/icmi"]
 
 [tool.uv]
 python-preference = "only-system"
+# Repo-local package cache so plain `uv run` stays isolated too. Note: a
+# machine-exported UV_CACHE_DIR env var still wins over this setting — the
+# dev wrappers remain the guaranteed-isolation path on such machines.
+cache-dir = ".uv-cache"
 
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"

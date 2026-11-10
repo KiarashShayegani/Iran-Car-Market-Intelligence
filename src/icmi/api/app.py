@@ -49,6 +49,28 @@ def _to_filters(request_or_params) -> SearchFilters:
     return SearchFilters()
 
 
+def _load_repo_env() -> None:
+    """Load the repo-local .env (same semantics as the dev wrappers: values
+    override). Keeps `uv run uvicorn icmi.api.app:app` fully configured
+    without the wrapper. UV_* keys are skipped — uv resolves those itself."""
+    import os
+
+    from icmi.core.paths import repo_root
+
+    env_path = repo_root() / ".env"
+    if not env_path.is_file():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        name = name.strip()
+        if name.startswith("UV_"):
+            continue
+        os.environ[name] = value.strip()
+
+
 def create_app(
     search_service: SearchService | None = None,
     store: CanonicalStore | None = None,
@@ -472,3 +494,10 @@ def _jsonable(record: dict) -> dict:
         return str(value)
 
     return {key: conv(value) for key, value in record.items()}
+
+
+_load_repo_env()
+# Module-level ASGI app: enables the standard `uv run uvicorn
+# icmi.api.app:app --reload --port 8000` workflow. Services resolve lazily
+# on first request; tests inject fakes via create_app(...) instead.
+app = create_app()
