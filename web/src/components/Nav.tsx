@@ -23,11 +23,12 @@ export default function Nav() {
           <Link
             key={href}
             href={href}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-all ${
               active
-                ? "bg-teal-700 text-white"
+                ? "text-white shadow-sm"
                 : "text-slate-600 hover:bg-slate-100"
             }`}
+            style={active ? { background: "var(--gradient-brand)" } : {}}
           >
             {Icon && <Icon size={15} strokeWidth={2} />}
             {label}

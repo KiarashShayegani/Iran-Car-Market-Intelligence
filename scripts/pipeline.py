@@ -35,6 +35,10 @@ def main(argv: list[str] | None = None) -> int:
         "--mode", choices=("manual", "ci", "scheduled"), default="manual",
         help="execution mode recorded in manifests (default: manual)",
     )
+    parser.add_argument(
+        "--collection", default="full",
+        help="named collection preset (e.g. brand-pride) — applies to collect",
+    )
     parser.add_argument("--max-pages", type=int, default=2)
     parser.add_argument("--target-listings", type=int, default=48)
     parser.add_argument("--config", default=None, help="alternative sources.yaml")
@@ -56,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     runner = PipelineRunner(mode=args.mode, config_path=args.config)
     report = runner.run(
         stages, platforms=platforms, max_pages=args.max_pages,
-        target_listings=args.target_listings,
+        target_listings=args.target_listings, collection=args.collection,
     )
 
     for line in report.summary_lines():

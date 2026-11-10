@@ -77,6 +77,7 @@ class PipelineRunner:
         platforms: list[str],
         max_pages: int,
         target_listings: int,
+        collection: str = "full",
     ) -> StageResult:
         import subprocess
         import sys
@@ -89,6 +90,7 @@ class PipelineRunner:
                     str(repo_root() / "scripts" / "collect.py"),
                     "--platform", platform,
                     "--mode", self.mode,
+                    "--collection", collection,
                     "--max-pages", str(max_pages),
                     "--target-listings", str(target_listings),
                 ],
@@ -189,6 +191,7 @@ class PipelineRunner:
         platforms: list[str] | None = None,
         max_pages: int = 2,
         target_listings: int = 48,
+        collection: str = "full",
     ) -> PipelineReport:
         # fresh report per run() call — the runner instance is reusable
         self.report = PipelineReport(
@@ -212,6 +215,7 @@ class PipelineRunner:
                                 platforms or list(self.sources.enabled_sources()),
                                 max_pages,
                                 target_listings,
+                                collection=collection,
                             )
                         )
                     elif stage == "ingest":

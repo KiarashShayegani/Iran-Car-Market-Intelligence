@@ -46,6 +46,55 @@ sources:
       page_param: pageIndex
       page_size: 12
       page_size_param: pageSize
+    # Brand-targeted collection presets (G5): the `vehicle` param is verified
+    # live (2026-11-11, pride → 31 listings, correct envelope). Brand slugs
+    # carried over from the v2 scraper. Add entries here to extend coverage.
+    collections:
+      full:
+        description: Unfiltered newest feed (rotates — not an enumeration basis)
+        params: {}
+      brand-pride:
+        description: پراید (saipa family)
+        params: {vehicle: pride}
+      brand-peugeot:
+        description: پژو
+        params: {vehicle: peugeot}
+      brand-shahin:
+        description: شاهین
+        params: {vehicle: shahin}
+      brand-tara:
+        description: تارا
+        params: {vehicle: tara}
+      brand-dena:
+        description: دنا
+        params: {vehicle: dena}
+      brand-quick:
+        description: کوییک
+        params: {vehicle: quick}
+      brand-saina:
+        description: ساینـا
+        params: {vehicle: saina}
+      brand-kia:
+        description: کیا
+        params: {vehicle: kia}
+      brand-toyota:
+        description: تویوتا
+        params: {vehicle: toyota}
+      brand-kmc:
+        description: کی ام سی
+        params: {vehicle: kmc}
+      brand-fownix:
+        description: فونیکس
+        params: {vehicle: fownix}
+      brand-lamari:
+        description: لاماری
+        params: {vehicle: lamari}
+      brand-lucano:
+        description: لوکانو
+        params: {vehicle: lucano}
+      brand-reera:
+        description: ری‌را
+        params: {vehicle: reera}
     # Canonical fields Bama is known to be able to provide (from the research
     # notebook: 100% description coverage on 100 sampled listings).
     # source_published_at is a relative label, not an absolute timestamp.
@@ -199,3 +248,5 @@ sources:
       Listing cards expose useful attributes but no stable listing UUID or
       public page URL in the investigated responses; detail route depends on a
       Next.js build ID. Deferred until listing identity is solved.
+      Re-probed 2026-11-11 (G5): unchanged — car_posts still expose no
+      identity fields.

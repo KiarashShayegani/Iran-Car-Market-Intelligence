@@ -1,39 +1,57 @@
 @import "tailwindcss";
 
+/* ICMI design tokens — modern, minimal, confident.
+   Palette: deep emerald primary with a cool cyan-blue gradient partner,
+   warm neutrals for surfaces, restrained amber for platform warmth. */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #f6f8fa;
+  --foreground: #0b1220;
   --card: #ffffff;
-  --accent: #0f766e;
-  --accent-hover: #115e59;
-  --accent-soft: #f0fdfa;
-  --border: #e2e8f0;
-  --muted: #64748b;
-  --bg-muted: #f1f5f9;
-  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
-  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08);
+  --border: #e3e9f0;
+  --muted: #5b6b7f;
+  --bg-muted: #eef2f7;
+
+  /* brand accents */
+  --accent: #0e7c6b;
+  --accent-hover: #0b6355;
+  --accent-soft: #e6f7f3;
+  --accent-2: #0e7490;      /* cyan-blue gradient partner */
+  --gradient-brand: linear-gradient(135deg, #0e7c6b 0%, #0e7490 100%);
+  --gradient-hero: linear-gradient(135deg, #0b1220 0%, #113a36 55%, #0e7490 100%);
+
+  /* semantic */
+  --danger: #b91c1c;
+  --warning-bg: #fef3c7;
+  --warning-text: #92400e;
+  --info-bg: #e0e7ff;
+  --info-text: #4338ca;
+
+  /* elevation */
+  --shadow-sm: 0 1px 2px 0 rgb(11 18 32 / 0.06);
+  --shadow-md: 0 6px 18px -4px rgb(11 18 32 / 0.1);
+  --shadow-lg: 0 14px 34px -8px rgb(11 18 32 / 0.18);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Vazirmatn, "Segoe UI", Tahoma, Arial, sans-serif;
-  font-feature-settings: "ss01";
 }
 
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: 0.9rem;
   box-shadow: var(--shadow-sm);
 }
 
 .card-hover {
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
 }
 .card-hover:hover {
   box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  border-color: #c9d6e2;
 }
 
 .chip {
@@ -47,29 +65,29 @@ body {
 }
 
 .platform-bama {
-  background: #fef3c7;
+  background: linear-gradient(120deg, #fef3c7, #fde68a);
   color: #92400e;
 }
 .platform-sheypoor {
-  background: #dbeafe;
+  background: linear-gradient(120deg, #dbeafe, #bfdbfe);
   color: #1e40af;
 }
 .platform-hamrah_mechanic {
-  background: #dcfce7;
+  background: linear-gradient(120deg, #dcfce7, #bbf7d0);
   color: #166534;
 }
 
 .score-high {
-  background: #ccfbf1;
-  color: #0f766e;
+  background: linear-gradient(120deg, #ccfbf1, #d1fae5);
+  color: #0b6355;
 }
 .score-mid {
-  background: #e0e7ff;
+  background: linear-gradient(120deg, #e0e7ff, #dbeafe);
   color: #4338ca;
 }
 .score-low {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--bg-muted);
+  color: var(--muted);
 }
 
 .excerpt {
@@ -89,7 +107,7 @@ select,
 textarea {
   background: #fff;
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border-radius: 0.6rem;
   padding: 0.5rem 0.75rem;
   font-family: inherit;
   width: 100%;
@@ -105,16 +123,20 @@ textarea:focus {
 }
 
 .btn {
-  background: var(--accent);
+  background: var(--gradient-brand);
   color: #fff;
-  border-radius: 0.5rem;
-  padding: 0.55rem 1.25rem;
+  border-radius: 0.6rem;
+  padding: 0.55rem 1.35rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease;
+  border: none;
+  transition: filter 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: var(--shadow-sm);
 }
-.btn:hover {
-  background: var(--accent-hover);
+.btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 .btn:disabled {
   opacity: 0.5;
@@ -130,13 +152,50 @@ textarea:focus {
   font-size: 0.75rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 .btn-secondary:hover {
-  background: var(--bg-muted);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.tab-active {
+  background: var(--gradient-brand);
+  color: #fff;
 }
 
 .answer-text {
   line-height: 2.1;
   white-space: pre-wrap;
+}
+.answer-text h1,
+.answer-text h2,
+.answer-text h3 {
+  font-weight: 700;
+  margin: 0.8em 0 0.4em;
+}
+.answer-text ul,
+.answer-text ol {
+  padding-inline-start: 1.4em;
+  margin: 0.5em 0;
+}
+.answer-text li {
+  margin-bottom: 0.25em;
+}
+.answer-text table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.6em 0;
+  font-size: 0.85em;
+}
+.answer-text th,
+.answer-text td {
+  border: 1px solid var(--border);
+  padding: 0.35em 0.6em;
+}
+.answer-text code {
+  background: var(--bg-muted);
+  border-radius: 0.3rem;
+  padding: 0.1em 0.4em;
+  font-size: 0.85em;
 }

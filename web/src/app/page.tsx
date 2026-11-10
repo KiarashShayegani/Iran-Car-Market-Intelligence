@@ -39,9 +39,12 @@ export default function Home() {
   return (
     <div className="space-y-8">
       {/* hero */}
-      <section className="card p-6 text-center">
-        <h1 className="text-xl font-bold">بازار هوشمند خودرو ایران</h1>
-        <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+      <section
+        className="p-8 text-center rounded-[1.1rem]"
+        style={{ background: "var(--gradient-hero)", color: "#fff" }}
+      >
+        <h1 className="text-2xl font-bold tracking-tight">بازار هوشمند خودرو ایران</h1>
+        <p className="mt-2 text-sm" style={{ color: "rgba(255,255,255,0.82)" }}>
           جستجوی معنایی آگهی‌ها از باما، شیپور و همراه‌مکانیک — با فیلترهای
           دقیق و ارجاع به آگهی اصلی
         </p>
@@ -58,15 +61,20 @@ export default function Home() {
             جستجو
           </button>
         </div>
-        <div className="mt-3 flex flex-wrap justify-center gap-2">
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
           {DEMO_QUERIES.slice(0, 3).map((dq) => (
-            <button key={dq} className="btn-secondary" onClick={() => submit(dq)}>
+            <button
+              key={dq}
+              onClick={() => submit(dq)}
+              className="chip"
+              style={{ background: "rgba(255,255,255,0.14)", color: "#fff" }}
+            >
               {dq}
             </button>
           ))}
         </div>
         {apiError && (
-          <p className="mt-3 text-xs" style={{ color: "#b45309" }}>
+          <p className="mt-3 text-xs" style={{ color: "#fecaca" }}>
             ⚠️ {apiError}
           </p>
         )}

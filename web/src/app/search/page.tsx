@@ -27,7 +27,9 @@ function SearchContent() {
   const [filters, setFilters] = useState<FiltersState>(EMPTY_FILTERS);
   const [sort, setSort] = useState("relevance");
   const [results, setResults] = useState<SearchApiResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  // skeletons from first paint when arriving with ?q= (auto-run effect
+  // fires after hydration — this avoids a brief blank flash)
+  const [loading, setLoading] = useState(Boolean(initialQuery));
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
