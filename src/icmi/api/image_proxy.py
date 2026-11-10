@@ -32,6 +32,7 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 )
 FETCH_TIMEOUT_SECONDS = 20
+MAX_IMAGE_BYTES = 15 * 1024 * 1024  # generous cap; largest observed ~270 KB
 
 
 class ImageProxyError(Exception):
@@ -128,9 +129,13 @@ class ImageCache:
             return False
         if getattr(response, "status_code", 0) != 200:
             return False
+        # Validation applies to ANY fetcher (injected test fetchers included):
+        content_type = response.headers.get("content-type", "").split(";")[0].strip()
         content = getattr(response, "content", b"")
-        if not content:
-            return False
+        if response.status_code == 200 and not content_type.startswith("image/"):
+            return False  # error pages / non-images must never be cached
+        if not content or len(content) > MAX_IMAGE_BYTES:
+            return False  # oversized bodies refused (cap is generous)
         tmp = path.with_suffix(".tmp")
         tmp.write_bytes(content)
         tmp.replace(path)  # atomic
@@ -147,8 +152,14 @@ class ImageCache:
 
     @staticmethod
     def _default_fetch(url: str):
+        """No redirects: an allowed host must not bounce us to arbitrary
+        hosts (allowlist bypass). Body validation lives in _fetch_to_cache
+        so injected fetchers are held to the same contract."""
         return requests.get(
-            url, headers={"User-Agent": USER_AGENT}, timeout=FETCH_TIMEOUT_SECONDS
+            url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=FETCH_TIMEOUT_SECONDS,
+            allow_redirects=False,
         )
 
     def _evict_if_needed(self) -> None:

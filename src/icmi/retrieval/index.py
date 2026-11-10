@@ -119,8 +119,13 @@ def save_index(
     metadata_path = out / "index_metadata.parquet"
     info_path = out / "index_meta.json"
 
-    np.save(vectors_path, vectors)
-    pd.DataFrame([vars(c) for c in chunks]).to_parquet(metadata_path, index=False)
+    # Atomic writes: temp files then rename — readers never see partial index.
+    np.save(vectors_path.with_suffix(".tmp.npy"), vectors)
+    pd.DataFrame([vars(c) for c in chunks]).to_parquet(
+        metadata_path.with_suffix(".tmp.parquet"), index=False
+    )
+    vectors_path.with_suffix(".tmp.npy").replace(vectors_path)
+    metadata_path.with_suffix(".tmp.parquet").replace(metadata_path)
     info_path.write_text(
         json.dumps(
             {

@@ -212,6 +212,13 @@ def create_app(
             },
         }
 
+    @app.get("/ops-status")
+    def ops_status() -> dict:
+        """Operational health: collection runs, DB, index freshness, backups."""
+        from icmi.ops.status import build_ops_status
+
+        return build_ops_status(get_store()._conn)
+
     @app.get("/search")
     def search(
         q: str = Query(min_length=1),

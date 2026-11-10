@@ -16,6 +16,15 @@ export default function ResultCard({ result }: { result: SearchResultItem }) {
         className="aspect-[4/3] w-full"
       />
       <div className="p-3">
+        <p className="text-sm font-bold truncate mb-1">
+          {[
+            result.brand_raw,
+            result.model_raw,
+            result.trim_raw,
+          ]
+            .filter(Boolean)
+            .join(" ") || result.listing_key}
+        </p>
         <div className="flex items-center justify-between gap-2">
           <span className={`chip platform-${result.source_platform}`}>
             {PLATFORM_LABELS[result.source_platform] ?? result.source_platform}

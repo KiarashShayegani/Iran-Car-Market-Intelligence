@@ -165,7 +165,9 @@ class SheypoorCollector(BaseCollector):
                 urls.extend(
                     v for v in tree if isinstance(v, str) and v.startswith("http")
                 )
-            return list(dict.fromkeys(urls))
+            from icmi.collectors.images import select_primary_images
+
+            return select_primary_images(list(dict.fromkeys(urls)))
 
         set_field("title", lambda: attributes.get("title"))
         set_field("description", lambda: ad.get("description"))

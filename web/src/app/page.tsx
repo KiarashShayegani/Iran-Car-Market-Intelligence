@@ -133,7 +133,10 @@ export default function Home() {
               />
               <div className="p-3">
                 <p className="text-xs font-semibold truncate">
-                  {card.model_raw ?? card.title ?? "—"}
+                  {[card.brand_raw, card.model_raw, card.title]
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .join(" ") || "—"}
                 </p>
                 <p className="mt-1 text-xs num font-bold" style={{ color: "var(--accent)" }}>
                   {card.price_amount !== null ? formatToman(card.price_amount) : "توافقی"}

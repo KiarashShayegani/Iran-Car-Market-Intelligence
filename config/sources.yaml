@@ -25,7 +25,7 @@ image_cache:
 
 pipeline:
   # Bumped whenever extraction logic changes; stored on every record/manifest.
-  extraction_version: icmi-v3-extraction-0
+  extraction_version: icmi-v3-extraction-1
   request_timeout_seconds: 30
   request_delay_seconds: 2.0
   request_jitter_seconds: 1.0

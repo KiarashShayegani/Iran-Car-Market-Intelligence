@@ -55,31 +55,22 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Collect (per platform; failures isolated and reported)
+      - name: Collect + refresh views (unified pipeline, mode=ci)
         run: |
           platforms=$(echo "${{ inputs.platforms }}" | tr ',' ' ')
           overall=0
           for p in $platforms; do
-            echo "::group::collect: $p"
-            if ! uv run python scripts/collect.py --platform "$p" --mode ci \
+            echo "::group::pipeline: $p"
+            if ! uv run python scripts/pipeline.py collect all --mode ci \
+                --platforms "$p" \
                 --max-pages "${{ inputs.max_pages }}" \
                 --target-listings "${{ inputs.target_listings }}"; then
-              echo "$p: collection FAILED — continuing with other platforms"
+              echo "$p: pipeline FAILED — continuing with other platforms"
               overall=1
             fi
             echo "::endgroup::"
           done
           exit $overall
-
-      - name: Ingest collected runs (runner-local canonical DB)
-        run: |
-          for run_dir in data/raw/*/; do
-            run_id=$(basename "$run_dir")
-            uv run python scripts/ingest.py --run-id "$run_id" || echo "$run_id: ingest FAILED — reported in manifest"
-          done
-
-      - name: Analytical Parquet export
-        run: uv run python scripts/export_analytics.py
 
       - name: Record run manifests into git (datasets never enter git)
         run: |

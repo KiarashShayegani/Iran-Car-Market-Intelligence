@@ -180,7 +180,9 @@ class BamaCollector(BaseCollector):
                     )
                 elif isinstance(image, str) and image.startswith("http"):
                     urls.append(image)
-            return list(dict.fromkeys(urls))
+            from icmi.collectors.images import select_primary_images
+
+            return select_primary_images(list(dict.fromkeys(urls)))
 
         set_field("image_urls", extract_images)  # empty list = no images (missing_in_ad)
         set_field("image_count", lambda: detail.get("image_count"))
