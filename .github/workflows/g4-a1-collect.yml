@@ -7,6 +7,19 @@ name: "G4-A1 one-page collection probe"
 
 on:
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Platforms (space-separated)"
+        default: "bama sheypoor hamrah_mechanic"
+      max_pages:
+        description: "Max pages per platform"
+        default: "1"
+      target_listings:
+        description: "Target unique listings per platform"
+        default: "24"
+      collection:
+        description: "Collection preset (bama)"
+        default: "full"
 
 permissions: {}
 
@@ -38,14 +51,16 @@ jobs:
             echo "}"
           } > data/g4-probe/env.json
 
-      - name: One-page collection per platform (with wall-time)
+      - name: Collection probe (with wall-time)
         run: |
           overall=0
-          for p in bama sheypoor hamrah_mechanic; do
+          for p in ${{ inputs.platforms || 'bama sheypoor hamrah_mechanic' }}; do
             echo "::group::collect: $p"
             START=$(date +%s)
             if uv run python scripts/collect.py --platform "$p" --mode ci \
-                --max-pages 1 --target-listings 24; then
+                --collection "${{ inputs.collection || 'full' }}" \
+                --max-pages "${{ inputs.max_pages || '1' }}" \
+                --target-listings "${{ inputs.target_listings || '24' }}"; then
               echo "$p: OK"
             else
               echo "$p: FAILED (exit $?)" — recorded in manifest
