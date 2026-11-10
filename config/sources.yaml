@@ -13,6 +13,16 @@
 
 schema_version: 1
 
+# Bounded cache-aside image proxy (G1 spike decision: direct CDN rendering
+# first, proxy fallback on failure; never auto-fetch beyond rendering needs).
+image_cache:
+  allow_hosts:
+    - cdn-sth1.bama.ir
+    - cdn.sheypoor.com
+    - ncdn.hamrah-mechanic.com
+  max_cache_mb: 300
+  ttl_days: 14
+
 pipeline:
   # Bumped whenever extraction logic changes; stored on every record/manifest.
   extraction_version: icmi-v3-extraction-0

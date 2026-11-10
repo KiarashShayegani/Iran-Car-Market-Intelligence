@@ -53,6 +53,7 @@ class IndexedChunk:
     price_amount: int | None
     mileage_km: int | None
     location_raw: str | None
+    image_urls_json: str | None
 
 
 def _metadata_frame(store) -> pd.DataFrame:
@@ -62,7 +63,7 @@ def _metadata_frame(store) -> pd.DataFrame:
         """
         SELECT listing_key, original_url, raw_payload_ref_json, extraction_version,
                brand_raw, model_raw, year_raw, mileage_raw, price_amount, location_raw,
-               brand_key, model_key, year_num, year_calendar, mileage_km
+               brand_key, model_key, year_num, year_calendar, mileage_km, image_urls_json
         FROM listings
         """
     )
@@ -99,6 +100,7 @@ def build_index_metadata(store) -> list[IndexedChunk]:
                 price_amount=listing["price_amount"],
                 mileage_km=listing["mileage_km"],
                 location_raw=listing["location_raw"],
+                image_urls_json=listing["image_urls_json"],
             )
         )
     return chunks

@@ -20,7 +20,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-DATA_SUBDIRS = ("raw", "canonical", "analytical", "index", "manifests", "models")
+DATA_SUBDIRS = ("raw", "canonical", "analytical", "index", "manifests", "models", "image-cache")
 
 
 def repo_root() -> Path:
@@ -70,3 +70,8 @@ def manifests_dir() -> Path:
 def models_dir() -> Path:
     """Local model weights and embedding-model caches."""
     return _subdir("models")
+
+
+def image_cache_dir() -> Path:
+    """Bounded cache for advertisement images (derived, rebuildable)."""
+    return _subdir("image-cache")

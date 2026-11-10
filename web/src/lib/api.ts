@@ -19,6 +19,38 @@ export interface SearchResultItem {
   price_amount: number | null;
   mileage_km: number | null;
   location_raw: string | null;
+  image_url?: string | null;
+}
+
+export interface ListingCard {
+  listing_key: string;
+  source_platform: string;
+  original_url: string | null;
+  title: string | null;
+  brand_raw: string | null;
+  model_raw: string | null;
+  price_amount: number | null;
+  year_num: number | null;
+  year_calendar: string | null;
+  mileage_km: number | null;
+  location_raw: string | null;
+  image_url: string | null;
+  first_seen_at: string;
+}
+
+export interface LatestApiResponse {
+  listings: ListingCard[];
+}
+
+export interface FacetsApiResponse {
+  brands: { key: string; label: string; count: number }[];
+  platforms: { platform: string; count: number }[];
+  freshness: {
+    oldest_collection: string | null;
+    newest_collection: string | null;
+    total_listings: number;
+    priced_listings: number;
+  };
 }
 
 export interface SearchApiResponse {
@@ -26,6 +58,10 @@ export interface SearchApiResponse {
   mode: "semantic" | "hybrid";
   total_corpus: number;
   candidates_after_filters: number;
+  total_matched: number;
+  offset: number;
+  limit: number;
+  sort: string;
   results: SearchResultItem[];
 }
 
@@ -79,7 +115,16 @@ export interface ListingDetail {
   color_raw: string | null;
   first_seen_at: string;
   last_seen_at: string;
+  extraction_version: string;
   raw_payload_ref_json: string;
+  price_history: {
+    observed_at: string;
+    price_raw: string | null;
+    price_amount: number | null;
+    price_currency_raw: string | null;
+    run_id: string;
+  }[];
+  image_urls: string[];
 }
 
 export interface FiltersState {
@@ -135,11 +180,15 @@ export function filtersToBody(f: FiltersState): Record<string, unknown> {
 export async function searchAds(
   query: string,
   filters: FiltersState,
-  topK = 12
+  topK = 12,
+  offset = 0,
+  sort = "relevance"
 ): Promise<SearchApiResponse> {
   const params = filtersToParams(filters);
   params.set("q", query);
   params.set("top_k", String(topK));
+  params.set("offset", String(offset));
+  params.set("sort", sort);
   const res = await fetch(`${API_BASE}/search?${params.toString()}`);
   if (!res.ok) throw new Error(`خطای جستجو (${res.status})`);
   return res.json();
@@ -168,6 +217,42 @@ export async function askQuestion(
     throw new Error(detail || `خطای پرسش‌وپاسخ (${res.status})`);
   }
   return res.json();
+}
+
+export async function fetchLatest(limit = 8): Promise<LatestApiResponse> {
+  const res = await fetch(`${API_BASE}/latest?limit=${limit}`);
+  if (!res.ok) throw new Error(`خطا (${res.status})`);
+  return res.json();
+}
+
+export async function fetchFacets(): Promise<FacetsApiResponse> {
+  const res = await fetch(`${API_BASE}/facets`);
+  if (!res.ok) throw new Error(`خطا (${res.status})`);
+  return res.json();
+}
+
+export interface SimilarApiResponse {
+  listing_key: string;
+  results: SearchResultItem[];
+}
+
+export async function fetchSimilar(listingKey: string, limit = 6): Promise<SimilarApiResponse> {
+  const [platform, id] = listingKey.split(":");
+  const res = await fetch(`${API_BASE}/listings/${platform}/${id}/similar?limit=${limit}`);
+  if (!res.ok) throw new Error(`خطا (${res.status})`);
+  return res.json();
+}
+
+/**
+ * Qualitative relevance bands (owner decision: never present raw cosine as
+ * a calibrated percentage). Thresholds are corpus-relative, derived from the
+ * F3c evaluation distribution (relevant top hits ≥0.84; weak <0.80) — must
+ * be recalibrated as the corpus grows.
+ */
+export function scoreBand(score: number): { label: string; className: string } {
+  if (score >= 0.84) return { label: "تطابق بالا", className: "score-high" };
+  if (score >= 0.8) return { label: "تطابق متوسط", className: "score-mid" };
+  return { label: "تطابق کم", className: "score-low" };
 }
 
 export async function fetchStats(): Promise<StatsApiResponse> {

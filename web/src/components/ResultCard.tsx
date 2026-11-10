@@ -1,84 +1,52 @@
 "use client";
 
-import {
-  PLATFORM_LABELS,
-  SearchResultItem,
-  formatNumber,
-  formatToman,
-} from "@/lib/api";
+import Link from "next/link";
+import { PLATFORM_LABELS, SearchResultItem, formatNumber, formatToman, scoreBand } from "@/lib/api";
+import VehicleImage from "@/components/VehicleImage";
 
-export default function ResultCard({
-  result,
-  onOpenDetail,
-}: {
-  result: SearchResultItem;
-  onOpenDetail: (listingKey: string) => void;
-}) {
-  const platformLabel = PLATFORM_LABELS[result.source_platform] ?? result.source_platform;
-  const firstLine = result.excerpt.split("\n")[0];
+export default function ResultCard({ result }: { result: SearchResultItem }) {
+  const [platform, id] = result.listing_key.split(":");
+  const band = scoreBand(result.score);
 
   return (
-    <div className="card p-4 mb-3 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className={`chip platform-${result.source_platform}`}>{platformLabel}</span>
-          <span className="chip score-chip num">مشابهت {result.score.toFixed(4)}</span>
-          <span className="text-xs" style={{ color: "var(--muted)" }}>
-            شناسه: <span className="num">{result.listing_key}</span>
+    <Link href={`/listings/${platform}/${id}`} className="card card-hover overflow-hidden block">
+      <VehicleImage
+        src={result.image_url}
+        alt={result.model_raw ?? result.listing_key}
+        className="aspect-[4/3] w-full"
+      />
+      <div className="p-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className={`chip platform-${result.source_platform}`}>
+            {PLATFORM_LABELS[result.source_platform] ?? result.source_platform}
+          </span>
+          <span
+            className={`chip ${band.className}`}
+            title={`شباهت معنایی خام: ${result.score.toFixed(4)} (uncalibrated)`}
+          >
+            {band.label}
           </span>
         </div>
-        <button
-          onClick={() => onOpenDetail(result.listing_key)}
-          className="text-xs underline shrink-0"
-          style={{ color: "var(--accent)" }}
-        >
-          جزئیات
-        </button>
-      </div>
 
-      <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-        {result.brand_raw && <span className="chip btn-secondary">{result.brand_raw}</span>}
-        {result.model_raw && <span className="chip btn-secondary">{result.model_raw}</span>}
-        {result.year_num !== null && (
-          <span className="chip btn-secondary num">سال {formatNumber(result.year_num)}</span>
-        )}
-        {result.mileage_km !== null && (
-          <span className="chip btn-secondary num">
-            کارکرد {formatNumber(result.mileage_km)} کیلومتر
-          </span>
-        )}
-        {result.price_amount !== null && (
-          <span className="chip score-chip num">{formatToman(result.price_amount)}</span>
-        )}
-        {result.location_raw && (
-          <span className="chip btn-secondary">{result.location_raw}</span>
-        )}
-      </div>
-
-      <p className="mt-2 font-semibold text-sm">{firstLine}</p>
-      {result.excerpt.includes("\n") && (
-        <p className="mt-1 text-sm excerpt" style={{ color: "var(--foreground)" }}>
-          {result.excerpt.split("\n").slice(1).join("\n").slice(0, 300)}
-          {(result.excerpt.split("\n").slice(1).join("\n").length > 300) && "…"}
-        </p>
-      )}
-
-      <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
-        <span className="text-xs" style={{ color: "var(--muted)" }}>
-          {result.original_url ? (
-            <a href={result.original_url} target="_blank" rel="noopener noreferrer" className="underline">
-              مشاهده آگهی اصلی ↗
-            </a>
-          ) : (
-            "بدون لینک منبع"
+        <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+          {result.brand_raw && <span className="chip btn-secondary">{result.brand_raw}</span>}
+          {result.model_raw && <span className="chip btn-secondary">{result.model_raw}</span>}
+          {result.year_num !== null && (
+            <span className="chip btn-secondary num">سال {formatNumber(result.year_num)}</span>
           )}
-        </span>
-        <span className="text-xs" style={{ color: "var(--muted)" }}>
-          {result.chunk_count > 1
-            ? `قطعه ${result.chunk_index + 1} از ${result.chunk_count}`
-            : ""}
-        </span>
+        </div>
+
+        <p className="mt-2 text-sm num font-bold" style={{ color: "var(--accent)" }}>
+          {result.price_amount !== null ? formatToman(result.price_amount) : "توافقی"}
+        </p>
+
+        <p className="mt-1 text-[11px] num" style={{ color: "var(--muted)" }}>
+          {result.mileage_km !== null
+            ? `کارکرد ${formatNumber(result.mileage_km)} کیلومتر`
+            : "کارکرد نامشخص"}
+          {result.location_raw ? ` · ${result.location_raw}` : ""}
+        </p>
       </div>
-    </div>
+    </Link>
   );
 }

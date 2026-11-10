@@ -105,6 +105,10 @@ class SearchResponse:
     total_corpus: int
     candidates_after_filters: int
     results: list[SearchResult]
+    total_matched: int = 0  # results passing filters (before pagination)
+    offset: int = 0
+    limit: int | None = None
+    sort: str = "relevance"
 
     def summary_lines(self) -> list[str]:
         mode = "hybrid" if not self.filters.is_empty() else "semantic"
@@ -154,9 +158,10 @@ def rank_subset(
     query_vector: list[float],
     vectors: np.ndarray,
     subset_positions: np.ndarray,
-    top_k: int,
+    top_k: int | None = None,
 ) -> list[tuple[int, float]]:
-    """Cosine-rank only the filtered subset; returns (position, score) pairs."""
+    """Cosine-rank the filtered subset (ALL of it — pagination slices later).
+    Returns (position, score) pairs, best first."""
     if len(subset_positions) == 0:
         return []
     q = np.asarray(query_vector, dtype=np.float32)
@@ -165,7 +170,9 @@ def rank_subset(
     norms = np.linalg.norm(subset, axis=1)
     norms[norms == 0] = 1.0
     sims = (subset @ q) / (norms * q_norm)
-    order = np.argsort(-sims)[:top_k]
+    order = np.argsort(-sims)
+    if top_k is not None:
+        order = order[:top_k]
     return [(int(subset_positions[i]), float(sims[i])) for i in order]
 
 
@@ -182,7 +189,15 @@ class SearchService:
         query: str,
         filters: SearchFilters | None = None,
         top_k: int = 10,
+        offset: int = 0,
+        sort: str = "relevance",
     ) -> SearchResponse:
+        """Rank the ENTIRE filtered subset, then paginate.
+
+        Pagination never loosens filters and never re-ranks per page — page 2
+        is a true continuation of page 1. `sort` may reorder the ranked subset
+        by structured fields (relevance | price_asc | price_desc | year_desc).
+        """
         filters = filters or SearchFilters()
         filtered = (
             _apply_filters(self.metadata, filters)
@@ -192,10 +207,36 @@ class SearchService:
         subset_positions = filtered.index.to_numpy()
 
         query_vector = self.encoder.encode_query(query)
-        ranked = rank_subset(query_vector, self.vectors, subset_positions, top_k)
+        ranked = rank_subset(query_vector, self.vectors, subset_positions)
+        total_matched = len(ranked)
+
+        if sort in ("price_asc", "price_desc", "year_desc"):
+            def sort_key(item: tuple[int, float]):
+                row = self.metadata.iloc[item[0]]
+                if sort == "price_asc":
+                    return (
+                        row["price_amount"]
+                        if row["price_amount"] == row["price_amount"]
+                        else float("inf")
+                    )
+                if sort == "price_desc":
+                    return (
+                        -(row["price_amount"])
+                        if row["price_amount"] == row["price_amount"]
+                        else float("inf")
+                    )
+                return (
+                    -(row["year_num"])
+                    if row["year_num"] == row["year_num"]
+                    else float("inf")
+                )
+
+            ranked = sorted(ranked, key=sort_key)
+
+        page = ranked[offset : offset + top_k]
 
         results: list[SearchResult] = []
-        for position, score in ranked:
+        for position, score in page:
             row = self.metadata.iloc[position]
             results.append(
                 SearchResult(
@@ -216,4 +257,8 @@ class SearchService:
             total_corpus=len(self.metadata),
             candidates_after_filters=len(filtered),
             results=results,
+            total_matched=total_matched,
+            offset=offset,
+            limit=top_k,
+            sort=sort,
         )

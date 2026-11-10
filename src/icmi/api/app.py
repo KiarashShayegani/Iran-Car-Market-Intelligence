@@ -10,6 +10,7 @@ when LLM_BASE_URL is unset — search and stats keep working.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
@@ -19,6 +20,8 @@ from pydantic import BaseModel, Field
 from icmi import __version__
 from icmi.analytics.comparables import estimate_market_range
 from icmi.analytics.stats import market_stats
+from icmi.api.image_proxy import CachedImage, ImageCache, ImageProxyError
+from icmi.core.config import load_sources
 from icmi.core.paths import index_dir
 from icmi.pipeline.normalize import normalize_year
 from icmi.pipeline.store import CanonicalStore
@@ -65,11 +68,19 @@ def create_app(
         allow_headers=["*"],
     )
 
+    sources_cfg = load_sources()
+    image_cache = ImageCache(
+        allow_hosts=sources_cfg.image_cache.allow_hosts,
+        max_cache_mb=sources_cfg.image_cache.max_cache_mb,
+        ttl_days=sources_cfg.image_cache.ttl_days,
+    )
+
     state: dict[str, Any] = {
         "search_service": search_service,
         "store": store,
         "qa_client": qa_client,
         "qa_client_resolved": qa_client is not None,
+        "image_cache": image_cache,
     }
 
     def get_store() -> CanonicalStore:
@@ -108,10 +119,83 @@ def create_app(
             "llm_configured": get_qa_client() is not None,
         }
 
+    @app.get("/images/proxy")
+    def image_proxy(url: str = Query(min_length=1)) -> Any:
+        """Cache-aside fallback for CDN images (direct rendering is default)."""
+        from fastapi import Response
+
+        try:
+            cached: CachedImage = state["image_cache"].get(url)
+        except ImageProxyError as exc:
+            status = 400 if exc.kind == "disallowed" else 502
+            raise HTTPException(status_code=status, detail=str(exc)) from None
+        except Exception as exc:  # noqa: BLE001 — upstream/network failures
+            raise HTTPException(status_code=502, detail=f"image fetch failed: {exc}") from None
+        return Response(
+            content=cached.path.read_bytes(),
+            media_type=cached.content_type,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    @app.get("/latest")
+    def latest(limit: int = Query(default=12, ge=1, le=50)) -> dict:
+        """Most recently collected listings — homepage inventory surface."""
+        df = get_store().query_df(
+            """
+            SELECT listing_key, source_platform, original_url, title, brand_raw,
+                   model_raw, price_amount, year_num, year_calendar, mileage_km,
+                   location_raw, image_urls_json, first_seen_at
+            FROM listings ORDER BY first_seen_at DESC, listing_key LIMIT ?
+            """,
+            (limit,),
+        )
+        return {"listings": [_listing_card(row) for _, row in df.iterrows()]}
+
+    @app.get("/facets")
+    def facets() -> dict:
+        """Brand/model discovery + platform counts + freshness for the homepage."""
+        store = get_store()
+        brands = store.query_df(
+            """
+            SELECT brand_key, brand_raw, COUNT(*) AS count
+            FROM listings WHERE brand_key IS NOT NULL
+            GROUP BY brand_key ORDER BY count DESC
+            """
+        )
+        platforms = store.query_df(
+            "SELECT source_platform, COUNT(*) AS count FROM listings GROUP BY source_platform"
+        )
+        bounds = store.query_df(
+            """
+            SELECT MIN(first_seen_at) AS oldest, MAX(first_seen_at) AS newest,
+                   SUM(CASE WHEN price_amount IS NOT NULL THEN 1 ELSE 0 END) AS priced,
+                   COUNT(*) AS total
+            FROM listings
+            """
+        ).iloc[0]
+        return {
+            "brands": [
+                {"key": r["brand_key"], "label": r["brand_raw"], "count": int(r["count"])}
+                for _, r in brands.iterrows()
+            ],
+            "platforms": [
+                {"platform": r["source_platform"], "count": int(r["count"])}
+                for _, r in platforms.iterrows()
+            ],
+            "freshness": {
+                "oldest_collection": bounds["oldest"],
+                "newest_collection": bounds["newest"],
+                "total_listings": int(bounds["total"]),
+                "priced_listings": int(bounds["priced"]),
+            },
+        }
+
     @app.get("/search")
     def search(
         q: str = Query(min_length=1),
-        top_k: int = Query(default=10, ge=1, le=50),
+        top_k: int = Query(default=12, ge=1, le=50),
+        offset: int = Query(default=0, ge=0),
+        sort: str = Query(default="relevance"),
         platforms: str | None = None,
         brands: str | None = None,
         price_min: int | None = None,
@@ -133,8 +217,10 @@ def create_app(
             mileage_max_km=mileage_max_km,
             location_contains=location_contains,
         )
+        if sort not in ("relevance", "price_asc", "price_desc", "year_desc"):
+            raise HTTPException(status_code=400, detail=f"unknown sort: {sort}")
         service = get_search_service()
-        response = service.search(q, filters, top_k=top_k)
+        response = service.search(q, filters, top_k=top_k, offset=offset, sort=sort)
         meta_by_key = service.metadata.set_index("listing_key")
         results = []
         for r in response.results:
@@ -158,11 +244,17 @@ def create_app(
                     "location_raw": None if meta is None else _nan_safe(meta["location_raw"]),
                 }
             )
+            if meta is not None and meta.get("image_urls_json"):
+                results[-1]["image_url"] = _first_image(meta["image_urls_json"])
         return {
             "query": response.query,
             "mode": "hybrid" if not response.filters.is_empty() else "semantic",
             "total_corpus": response.total_corpus,
             "candidates_after_filters": response.candidates_after_filters,
+            "total_matched": response.total_matched,
+            "offset": response.offset,
+            "limit": response.limit,
+            "sort": response.sort,
             "results": results,
         }
 
@@ -195,7 +287,64 @@ def create_app(
             None if record.get("year_raw") is None
             else _calendar_of(record.get("year_raw"))
         )
+        observations = store.query_df(
+            """
+            SELECT observed_at, price_raw, price_amount, price_currency_raw, run_id
+            FROM price_observations WHERE listing_key = ? ORDER BY id
+            """,
+            (key,),
+        )
+        record["price_history"] = observations.to_dict(orient="records")
+        record["image_urls"] = (
+            json.loads(record["image_urls_json"])
+            if record.get("image_urls_json")
+            else []
+        )
         return _jsonable(record)
+
+    @app.get("/listings/{platform}/{listing_id}/similar")
+    def similar(platform: str, listing_id: str, limit: int = Query(default=6, ge=1, le=20)) -> dict:
+        """Retrieval-based similar ads: reuse the listing's own index vector —
+        no re-encoding, same embeddings, traceable results."""
+        key = f"{platform}:{listing_id}"
+        service = get_search_service()
+        matches = service.metadata.index[service.metadata["listing_key"] == key]
+        if len(matches) == 0:
+            raise HTTPException(status_code=404, detail="Listing not in index")
+        position = int(service.metadata.index.get_loc(matches[0]))
+        vector = service.vectors[position].tolist()
+        from icmi.retrieval.search import rank_subset
+
+        ranked = rank_subset(
+            vector, service.vectors, service.metadata.index.to_numpy(), top_k=limit + 1
+        )
+        results = []
+        for pos, score in ranked:
+            row = service.metadata.iloc[pos]
+            if row["listing_key"] == key:
+                continue
+            results.append(
+                {
+                    "listing_key": row["listing_key"],
+                    "source_platform": row["source_platform"],
+                    "score": round(score, 4),
+                    "text": row["text"],
+                    "original_url": row["original_url"],
+                    "brand_raw": _nan_safe(row["brand_raw"]),
+                    "model_raw": _nan_safe(row["model_raw"]),
+                    "year_num": _int_safe(row["year_num"]),
+                    "price_amount": _int_safe(row["price_amount"]),
+                    "mileage_km": _int_safe(row["mileage_km"]),
+                    "image_url": (
+                        _first_image(row["image_urls_json"])
+                        if "image_urls_json" in row
+                        else None
+                    ),
+                }
+            )
+            if len(results) >= limit:
+                break
+        return {"listing_key": key, "results": results}
 
     @app.get("/stats")
     def stats() -> dict:
@@ -255,6 +404,34 @@ def create_app(
     return app
 
 
+def _first_image(image_urls_json) -> str | None:
+    if not image_urls_json:
+        return None
+    try:
+        urls = json.loads(image_urls_json)
+        return urls[0] if isinstance(urls, list) and urls else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _listing_card(row) -> dict:
+    return {
+        "listing_key": row["listing_key"],
+        "source_platform": row["source_platform"],
+        "original_url": row["original_url"],
+        "title": row["title"],
+        "brand_raw": row["brand_raw"],
+        "model_raw": row["model_raw"],
+        "price_amount": _int_safe(row["price_amount"]),
+        "year_num": _int_safe(row["year_num"]),
+        "year_calendar": row["year_calendar"],
+        "mileage_km": _int_safe(row["mileage_km"]),
+        "location_raw": row["location_raw"],
+        "image_url": _first_image(row["image_urls_json"]),
+        "first_seen_at": row["first_seen_at"],
+    }
+
+
 def _nan_safe(value) -> str | None:
     import math
 
@@ -282,10 +459,16 @@ def _calendar_of(year_raw) -> str | None:
 
 
 def _jsonable(record: dict) -> dict:
-    out = {}
-    for key, value in record.items():
+    """JSON-safe conversion — lists/dicts pass through recursively (parsed
+    price_history and image_urls must arrive as arrays, not string blobs)."""
+
+    def conv(value):
         if value is None or isinstance(value, (str, int, float, bool)):
-            out[key] = value
-        else:
-            out[key] = str(value)
-    return out
+            return value
+        if isinstance(value, list):
+            return [conv(v) for v in value]
+        if isinstance(value, dict):
+            return {k: conv(v) for k, v in value.items()}
+        return str(value)
+
+    return {key: conv(value) for key, value in record.items()}

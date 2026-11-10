@@ -4,11 +4,12 @@ import { useState } from "react";
 import {
   AskApiResponse,
   Citation,
+  EMPTY_FILTERS,
   FiltersState,
   askQuestion,
 } from "@/lib/api";
 
-export default function AskPanel({ filters }: { filters: FiltersState }) {
+export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: FiltersState }) {
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

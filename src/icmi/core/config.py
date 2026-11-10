@@ -64,10 +64,19 @@ class SourceConfig(BaseModel):
         return dict(self.collections[name].params)
 
 
+class ImageCacheConfig(BaseModel):
+    """Bounded cache-aside image proxy settings (see EVOLUTION_PLAN G1)."""
+
+    allow_hosts: list[str] = Field(default_factory=list)
+    max_cache_mb: int = Field(default=300, gt=0)
+    ttl_days: int = Field(default=14, gt=0)
+
+
 class SourcesConfig(BaseModel):
     schema_version: int
     pipeline: PipelineConfig
     sources: dict[str, SourceConfig]
+    image_cache: ImageCacheConfig = Field(default_factory=ImageCacheConfig)
 
     def enabled_sources(self) -> dict[str, SourceConfig]:
         return {name: src for name, src in self.sources.items() if src.enabled}

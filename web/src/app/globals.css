@@ -1,25 +1,39 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f8fa;
-  --foreground: #1c2430;
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --card: #ffffff;
   --accent: #0f766e;
-  --accent-soft: #ccfbf1;
+  --accent-hover: #115e59;
+  --accent-soft: #f0fdfa;
   --border: #e2e8f0;
   --muted: #64748b;
+  --bg-muted: #f1f5f9;
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
+  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Vazirmatn, "Segoe UI", Tahoma, Arial, sans-serif;
+  font-feature-settings: "ss01";
 }
 
 .card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.card-hover {
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.card-hover:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
 .chip {
@@ -45,19 +59,32 @@ body {
   color: #166534;
 }
 
+.score-high {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+.score-mid {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+.score-low {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
 .excerpt {
   white-space: pre-line;
   line-height: 1.9;
 }
 
-.score-chip {
+.num {
   font-variant-numeric: tabular-nums;
-  background: var(--accent-soft);
-  color: var(--accent);
+  font-feature-settings: "tnum";
 }
 
 input[type="text"],
 input[type="number"],
+input[type="search"],
 select,
 textarea {
   background: #fff;
@@ -66,13 +93,15 @@ textarea {
   padding: 0.5rem 0.75rem;
   font-family: inherit;
   width: 100%;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .btn {
@@ -82,6 +111,10 @@ textarea:focus {
   padding: 0.55rem 1.25rem;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s ease;
+}
+.btn:hover {
+  background: var(--accent-hover);
 }
 .btn:disabled {
   opacity: 0.5;
@@ -92,22 +125,18 @@ textarea:focus {
   background: #fff;
   color: var(--foreground);
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.55rem 1.25rem;
-  font-weight: 600;
+  border-radius: 9999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
   cursor: pointer;
+  transition: background 0.15s ease;
 }
-
-.tab-active {
-  background: var(--accent);
-  color: #fff;
+.btn-secondary:hover {
+  background: var(--bg-muted);
 }
 
 .answer-text {
   line-height: 2.1;
   white-space: pre-wrap;
-}
-
-.num {
-  font-variant-numeric: tabular-nums;
 }

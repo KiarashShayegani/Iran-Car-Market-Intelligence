@@ -37,7 +37,7 @@ interface EstimateResponse {
   }[];
 }
 
-export default function EstimatePanel({ onOpenDetail }: { onOpenDetail: (k: string) => void }) {
+export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: string) => void }) {
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [year, setYear] = useState("");
@@ -169,6 +169,7 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail: (k: stri
                               `${API_BASE}/listings/${c.listing_key.replace(":", "/")}`
                             );
                             if (res.ok) setDetail(await res.json());
+                            onOpenDetail?.(c.listing_key);
                           }}
                         >
                           جزئیات
