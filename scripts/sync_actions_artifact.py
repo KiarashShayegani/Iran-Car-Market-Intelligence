@@ -194,36 +194,94 @@ def _import_snapshot(snapshot_dir: Path, skip_derived: bool = False) -> None:
     print(result.stdout.strip())
 
 
+def _list_pending(token: str, repo: str) -> list[dict]:
+    """List recent successful collect-etl runs with pending/imported status."""
+    runs = requests.get(
+        f"{GITHUB_API}/repos/{repo}/actions/runs",
+        headers=_headers(token),
+        params={"status": "success", "per_page": 20}, timeout=30,
+    ).json()
+    out = []
+    for run in runs.get("workflow_runs", []):
+        if not run["path"].endswith(EXPECTED_WORKFLOW):
+            continue
+        arts = requests.get(
+            f"{GITHUB_API}/repos/{repo}/actions/runs/{run['id']}/artifacts",
+            headers=_headers(token), timeout=30,
+        ).json()
+        has_snapshot = any(a["name"].startswith("icmi-snapshot") for a in arts.get("artifacts", []))
+        out.append({
+            "run_id": run["id"],
+            "created_at": run["created_at"],
+            "has_snapshot": has_snapshot,
+        })
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--latest", action="store_true", help="latest successful collect-etl run")
-    parser.add_argument("--run-id", type=int, default=None)
+    parser.add_argument("--latest", action="store_true", help="import latest successful run")
+    parser.add_argument("--run-id", type=int, default=None, help="specific Actions run id")
+    parser.add_argument(
+        "--pending", action="store_true",
+        help="import all pending runs chronologically",
+    )
+    parser.add_argument("--list", action="store_true", help="list recent runs + import status")
+    parser.add_argument("--check", action="store_true", help="compact status summary (no import)")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
-    if not args.latest and args.run_id is None:
-        parser.error("either --latest or --run-id is required")
+    if not any([args.latest, args.run_id, args.pending, args.list, args.check]):
+        parser.error("one of --latest, --run-id, --pending, --list, --check is required")
 
     token = os.environ.get("GITHUB_TOKEN")
     if not token:
         print("GITHUB_TOKEN not set — add it to the repo .env", file=sys.stderr)
         return 2
 
-    run = _find_run(token, args.run_id)
-    print(f"actions run: {run['id']} | conclusion={run.get('conclusion')} | {run['created_at']}")
+    if args.check:
+        _print_status(token)
+        return 0
+    if args.list:
+        _list_runs(token)
+        return 0
+
+    repo = REPO
+    if args.pending:
+        # chronological import of all pending runs
+        pending = _list_pending(token)
+        not_yet = [r for r in pending if r["has_snapshot"]]
+        print(f"pending runs with artifacts: {len(not_yet)}")
+        for run_info in sorted(not_yet, key=lambda r: r["created_at"]):
+            print(f"\n--- importing run {run_info['run_id']} ({run_info['created_at']})")
+            _do_import(token, repo, run_info["run_id"], args.dry_run)
+        print("\npending import complete")
+        return 0
+
+    run_id = args.run_id
+    if args.latest:
+        run = _find_run(token, None)
+        run_id = run["id"]
+    _do_import(token, repo, run_id, args.dry_run)
+    return 0
+
+
+def _do_import(token: str, repo: str, run_id: int, dry_run: bool) -> None:
+    run = requests.get(
+        f"{GITHUB_API}/repos/{repo}/actions/runs/{run_id}",
+        headers=_headers(token), timeout=30,
+    ).json()
+    print(f"actions run: {run_id} | conclusion={run.get('conclusion')} | {run['created_at']}")
 
     with tempfile.TemporaryDirectory(prefix="icmi-actions-sync-") as tmp:
         workdir = Path(tmp)
-        snapshot_dir, dl_meta = _download_snapshot(token, run["id"], workdir)
+        snapshot_dir, dl_meta = _download_snapshot(token, run_id, workdir)
         verification, version_mismatch = _verify(snapshot_dir)
         print(f"verification: {json.dumps(verification, default=str)}")
         if verification["errors"]:
             print("ABORTING — verification errors:", verification["errors"], file=sys.stderr)
-            return 2
+            return
         if version_mismatch:
-            print(
-                "extraction version mismatch — importing raw runs only; "
-                "derived data skipped and will be rebuilt locally"
-            )
+            print("extraction version mismatch — importing raw runs only")
 
         from icmi.core.paths import canonical_dir
 
@@ -234,12 +292,11 @@ def main(argv: list[str] | None = None) -> int:
         new_runs = [r for r in snapshot_runs if r not in already]
         print(f"snapshot runs: {len(snapshot_runs)} | new to import: {len(new_runs)}")
 
-        if args.dry_run:
+        if dry_run:
             print("dry-run: no changes made")
-            return 0
+            return
 
-        # pre-import backup of the authoritative DB (owner safeguard)
-        backup = db_path.parent / f"pre-import-{run['id']}-{int(time.time())}.db"
+        backup = db_path.parent / f"pre-import-{run_id}-{int(time.time())}.db"
         if db_path.is_file():
             src = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
             dst = sqlite3.connect(backup)
@@ -258,18 +315,18 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             shutil.copy2(backup, db_path)
-            return 1
+            return
 
-        # idempotence probe: second import must change nothing
+        # idempotence probe
         _import_snapshot(snapshot_dir, skip_derived=version_mismatch)
         final = _counts(db_path)
         if final != after:
             print("FATAL: second import changed the DB — idempotence violated", file=sys.stderr)
-            return 1
+            return
         print("idempotence verified: second import changed nothing")
 
         report = {
-            "run_id": run["id"],
+            "run_id": run_id,
             "snapshot_runs": len(snapshot_runs),
             "new_runs_imported": len(new_runs),
             "before": before, "after": after,
@@ -278,7 +335,56 @@ def main(argv: list[str] | None = None) -> int:
             "version_mismatch": version_mismatch,
         }
         print("report:", json.dumps(report, default=str))
-    return 0
+
+
+def _print_status(token: str) -> None:
+    from icmi.core.paths import canonical_dir
+
+    db = canonical_dir() / "icmi.db"
+    runs = requests.get(
+        f"{GITHUB_API}/repos/{REPO}/actions/runs",
+        headers=_headers(token),
+        params={"status": "success", "per_page": 10}, timeout=30,
+    ).json()
+    cloud_runs = [
+        r for r in runs.get("workflow_runs", [])
+        if r["path"].endswith(EXPECTED_WORKFLOW)
+    ]
+    local_runs = _already_ingested_run_ids_safe(db)
+    pending = [r for r in cloud_runs if str(r["id"]) not in local_runs]
+    latest = cloud_runs[0] if cloud_runs else None
+    print(f"latest cloud run: {latest['id'] if latest else '—'} "
+          f"({latest['created_at'] if latest else '—'})")
+    print(f"latest local import: {max(local_runs) if local_runs else '—'}")
+    print(f"pending cloud runs: {len(pending)}")
+    for r in pending[:5]:
+        print(f"  {r['id']} ({r['created_at']})")
+    if db.is_file():
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        n_l = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
+        n_o = conn.execute("SELECT COUNT(*) FROM price_observations").fetchone()[0]
+        print(f"local DB: {n_l} listings, {n_o} observations")
+        conn.close()
+
+
+def _already_ingested_run_ids_safe(db: Path) -> list[str]:
+    if not db.is_file():
+        return []
+    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        return [r[0] for r in conn.execute("SELECT run_id FROM runs")]
+    finally:
+        conn.close()
+
+
+def _list_runs(token: str) -> None:
+    runs = requests.get(
+        f"{GITHUB_API}/repos/{REPO}/actions/runs",
+        headers=_headers(token),
+        params={"status": "success", "per_page": 10}, timeout=30,
+    ).json()
+    for r in runs.get("workflow_runs", []):
+        print(f"  {r['id']}  {r['created_at']}  {r['path']}")
 
 
 def _counts(db_path: Path) -> dict:
