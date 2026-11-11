@@ -16,6 +16,7 @@ sqlite-vec becomes justified only when profiling says so.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -34,6 +35,7 @@ INDEX_FORMAT_VERSION = "index-v1"
 class IndexedChunk:
     """One indexed row: document chunk + listing-level filter metadata."""
 
+    content_hash: str  # sha256 of normalized_text — incremental embedding key
     listing_key: str
     source_platform: str
     chunk_index: int
@@ -89,6 +91,9 @@ def build_index_metadata(store) -> list[IndexedChunk]:
         listing = listings.loc[doc.listing_key]
         chunks.append(
             IndexedChunk(
+                content_hash=hashlib.sha256(
+                    (doc.document_version + "|" + doc.normalized_text).encode()
+                ).hexdigest()[:16],
                 listing_key=doc.listing_key,
                 source_platform=listing["source_platform"],
                 chunk_index=doc.chunk_index,

@@ -201,3 +201,29 @@ def build_dashboard(store: CanonicalStore, f: AnalyticsFilters) -> dict:
             for _, r in enumerate(price_trend)
         ],
     }
+
+
+def listing_lifecycle(store: CanonicalStore) -> dict:
+    """Honest listing-lifecycle overview (count-based, no premature marking):
+    how many listings were last observed in each collection run. Absence from
+    one rotating/partial feed is NOT treated as disappearance."""
+    df = store.query_df(
+        """
+        SELECT l.listing_key, l.first_seen_at,
+               MAX(substr(po.observed_at, 1, 10)) AS last_observed
+        FROM listings l
+        LEFT JOIN price_observations po ON po.listing_key = l.listing_key
+        GROUP BY l.listing_key
+        """
+    )
+    by_day = df.groupby("last_observed").size().sort_index(ascending=False)
+    return {
+        "total": len(df),
+        "last_observed_distribution": [
+            {"day": str(day), "count": int(count)} for day, count in by_day.items()
+        ],
+        "note": (
+            "حذف شدن از یک فیدِ چرخشی به معنی فروش یا حذف آگهی نیست — وضعیت "
+            "چرخهٔ حیات فقط پس از جمع‌آوری‌های کامل و مکرر معنادار می‌شود."
+        ),
+    }

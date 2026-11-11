@@ -593,6 +593,7 @@ def create_app(
                     "source_platform": c.source_platform,
                     "original_url": c.original_url,
                     "score": c.score,
+                    "excerpt": c.text,
                 }
                 for c in answer.citations
             ],

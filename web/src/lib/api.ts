@@ -92,6 +92,7 @@ export interface Citation {
   source_platform: string;
   original_url: string | null;
   score: number;
+  excerpt?: string;
 }
 
 export interface AskApiResponse {

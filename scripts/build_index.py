@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build the vector index from canonical data (documents + metadata + vectors).
+"""Build/update the vector index from canonical data.
 
-Uses the adopted embedding model (e5-small — see docs/internal/
-EMBEDDING_BENCHMARK.md). Idempotent: regenerates index artifacts from
-canonical truth. Vectors+metadata land in data/index/.
+Uses incremental embedding by default (H4): chunks whose content hash is
+unchanged keep their existing vectors — only new/changed chunks are encoded.
+`--full` forces a complete re-encode. Model: e5-small (see
+docs/internal/EMBEDDING_BENCHMARK.md).
 """
 
 from __future__ import annotations
@@ -12,44 +13,33 @@ import argparse
 import sys
 from pathlib import Path
 
-import numpy as np
-
 from icmi.core.paths import index_dir
 from icmi.pipeline.store import CanonicalStore
-from icmi.retrieval.encoder import DEFAULT_MODEL_ID, get_encoder
-from icmi.retrieval.index import build_index_metadata, save_index
+from icmi.retrieval.encoder import DEFAULT_MODEL_ID
+from icmi.retrieval.incremental import incremental_index_build
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--db", default=None)
     parser.add_argument("--model", default=DEFAULT_MODEL_ID)
+    parser.add_argument(
+        "--full", action="store_true", help="ignore existing index (full re-encode)"
+    )
     args = parser.parse_args(argv)
 
     store = CanonicalStore(Path(args.db) if args.db else None)
     try:
-        chunks = build_index_metadata(store)
+        result = incremental_index_build(
+            store, model_id=args.model,
+            out_dir=index_dir(), full_rebuild=args.full,
+        )
     finally:
         store.close()
-    if not chunks:
-        print(
-            "No documents to index — run scripts/build_documents.py after collecting",
-            file=sys.stderr,
-        )
-        return 2
-
-    print(f"encoding {len(chunks)} chunks with {args.model}")
-    encoder = get_encoder(args.model)
-    vectors = np.asarray(encoder.encode_passages([c.normalized_text for c in chunks]))
-    paths = save_index(vectors, chunks, args.model, index_dir())
-
-    info = {
-        "chunks": len(chunks),
-        "dim": vectors.shape[1],
-        "vectors": str(paths["vectors"]),
-        "metadata": str(paths["metadata"]),
-    }
-    print(f"index built: {info}")
+    print(
+        f"index updated: {result['total_chunks']} chunks "
+        f"({result['carried_over']} carried over, {result['newly_encoded']} re-encoded)"
+    )
     return 0
 
 

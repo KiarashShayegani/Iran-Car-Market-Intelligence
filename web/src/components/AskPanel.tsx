@@ -65,6 +65,24 @@ export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: Filter
         </button>
       </div>
 
+      {!question && !answer && !error && (
+        <div className="mt-3">
+          <p className="text-xs mb-2" style={{ color: "var(--muted)" }}>نمونه‌پرسش‌ها:</p>
+          <div className="flex flex-wrap gap-2">
+            {[
+              "ارزان‌ترین ماشین اتوماتیک چیه؟",
+              "کدوم ماشین‌ها گارانتی فعال دارن؟",
+              "بین پژوها کدوم مدل گرون‌تره؟",
+              "ماشین‌های کم‌کارکرد زیر ده میلیارد چی داریم؟",
+            ].map((q) => (
+              <button key={q} className="chip btn-secondary" onClick={() => setQuestion(q)}>
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {error && (
         <div
           className="mt-4 p-3 rounded-lg text-sm"
