@@ -1,0 +1,125 @@
+name: "H-ops: Data Pipeline (dispatch-only, schedules disabled)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      presets:
+        description: "Comma-separated Bama brand presets for this run"
+        default: "brand-pride,brand-peugeot,brand-shahin,brand-tara"
+      max_pages:
+        description: "Max pages per preset/platform"
+        default: "3"
+      target_listings:
+        description: "Target unique listings per platform/preset"
+        default: "60"
+      include_raw:
+        description: "Include raw payloads in artifact"
+        default: "true"
+        type: boolean
+  # schedule:            # DORMANT — H-ops-5 owner gate
+  #   - cron: "30 2 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: h-ops-pipeline
+  cancel-in-progress: false
+
+jobs:
+  bama:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync
+      - name: Collect Bama (rotating presets)
+        run: |
+          presets=$(echo "${{ inputs.presets }}" | tr ',' ' ')
+          overall=0
+          for preset in $presets; do
+            echo "::group::bama/$preset"
+            if ! uv run python scripts/collect.py --platform bama --mode ci \
+                --collection "$preset" \
+                --max-pages "${{ inputs.max_pages }}" \
+                --target-listings "${{ inputs.target_listings }}"; then
+              echo "$preset: FAILED" && overall=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $overall
+
+  sheypoor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync
+      - name: Collect Sheypoor
+        run: |
+          uv run python scripts/collect.py --platform sheypoor --mode ci \
+            --max-pages "${{ inputs.max_pages }}" \
+            --target-listings "${{ inputs.target_listings }}" \
+            || echo "::warning::sheypoor collection failed"
+
+  hamrah_mechanic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync
+      - name: Collect Hamrah Mechanic
+        run: |
+          uv run python scripts/collect.py --platform hamrah_mechanic --mode ci \
+            --max-pages "${{ inputs.max_pages }}" \
+            --target-listings "${{ inputs.target_listings }}" \
+            || echo "::warning::hamrah_mechanic collection failed"
+
+  validate-and-publish:
+    needs: [bama, sheypoor, hamrah_mechanic]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync
+
+      - name: Download per-platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: data/raw/
+          merge-multiple: true
+
+      - name: Publish ingestion bundle (raw + manifests + metrics + checksums)
+        run: |
+          mkdir -p data/g4-bundle/metrics data/g4-bundle/logs
+          cp data/manifests/*.json data/g4-bundle/metrics/ 2>/dev/null || true
+          uv run python scripts/generate_metrics_summary.py
+          if [ "${{ inputs.include_raw }}" = "true" ]; then
+            cp -r data/raw/ data/g4-bundle/raw/ 2>/dev/null || true
+          fi
+          cd data/g4-bundle && find . -type f ! -name SHA256SUMS -exec sha256sum {} \; > SHA256SUMS
+
+      - name: Upload ingestion bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: icmi-ingestion-${{ github.run_id }}
+          path: data/g4-bundle/
+          retention-days: 30
+
+      - name: Workflow summary
+        if: always()
+        run: |
+          echo "## H-ops pipeline summary" >> $GITHUB_STEP_SUMMARY
+          echo "- status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- artifact: icmi-ingestion-${{ github.run_id }} (30-day retention)" >> $GITHUB_STEP_SUMMARY
+          echo "- import: \`sync_actions_artifact.py --run-id ${{ github.run_id }}\`" >> $GITHUB_STEP_SUMMARY
