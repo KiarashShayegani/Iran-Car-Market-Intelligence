@@ -8,6 +8,7 @@ import {
   EMPTY_FILTERS,
   FiltersState,
   SearchApiResponse,
+  filtersActiveCount,
   searchAds,
 } from "@/lib/api";
 
@@ -35,7 +36,7 @@ function SearchContent() {
 
   const run = useCallback(
     async (q: string, f: FiltersState, s: string, offset: number) => {
-      if (!q.trim()) return;
+      if (!q.trim() && filtersActiveCount(f) === 0) return;  // nothing to browse
       offset === 0 ? setLoading(true) : setLoadingMore(true);
       setError(null);
       try {
@@ -93,7 +94,11 @@ function SearchContent() {
             <option value="price_asc">ارزان‌ترین</option>
             <option value="year_desc">سال نو</option>
           </select>
-          <button className="btn shrink-0" onClick={() => run(query, filters, sort, 0)}>
+          <button
+            className="btn shrink-0"
+            onClick={() => run(query, filters, sort, 0)}
+            disabled={!query.trim() && filtersActiveCount(filters) === 0}
+          >
             جستجو
           </button>
         </div>
@@ -109,7 +114,13 @@ function SearchContent() {
 
       {results && (
         <p className="text-xs" style={{ color: "var(--muted)" }}>
-          حالت: {results.mode === "hybrid" ? "ترکیبی (فیلتر + معنایی)" : "معنایی"} · کل داده:{" "}
+          حالت:{" "}
+          {results.mode === "hybrid"
+            ? "ترکیبی (فیلتر + معنایی)"
+            : results.mode === "browse"
+              ? "مرور با فیلتر"
+              : "معنایی"}{" "}
+          · کل داده:{" "}
           <span className="num">{results.total_corpus}</span> · پس از فیلتر:{" "}
           <span className="num">{results.candidates_after_filters}</span> · یافت‌شده:{" "}
           <span className="num">{results.total_matched}</span> · نمایش:{" "}

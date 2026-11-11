@@ -21,6 +21,9 @@ export interface SearchResultItem {
   mileage_km: number | null;
   location_raw: string | null;
   image_url?: string | null;
+  fuel_raw?: string | null;
+  transmission_raw?: string | null;
+  body_type_raw?: string | null;
 }
 
 export interface ListingCard {
@@ -43,9 +46,26 @@ export interface LatestApiResponse {
   listings: ListingCard[];
 }
 
+export interface BrandFacet {
+  key: string;
+  label: string;
+  count: number;
+  models: { label: string; count: number }[];
+}
+
 export interface FacetsApiResponse {
-  brands: { key: string; label: string; count: number }[];
+  brands: BrandFacet[];
+  fuel: string[];
+  transmission: string[];
+  body_type: string[];
+  locations: { label: string; count: number }[];
   platforms: { platform: string; count: number }[];
+  bounds: {
+    min_price: number | null;
+    max_price: number | null;
+    min_year: number | null;
+    max_year: number | null;
+  };
   freshness: {
     oldest_collection: string | null;
     newest_collection: string | null;
@@ -56,7 +76,7 @@ export interface FacetsApiResponse {
 
 export interface SearchApiResponse {
   query: string;
-  mode: "semantic" | "hybrid";
+  mode: "semantic" | "hybrid" | "browse";
   total_corpus: number;
   candidates_after_filters: number;
   total_matched: number;
@@ -131,7 +151,8 @@ export interface ListingDetail {
 
 export interface FiltersState {
   platforms: string[];
-  brands: string;
+  brands: string;      // comma-separated normalized keys
+  models: string;      // comma-separated model labels
   price_min: string;
   price_max: string;
   year_min: string;
@@ -139,11 +160,15 @@ export interface FiltersState {
   year_calendar: string;
   mileage_max_km: string;
   location_contains: string;
+  fuel: string;        // comma-separated
+  transmission: string;
+  body_type: string;
 }
 
 export const EMPTY_FILTERS: FiltersState = {
   platforms: [],
   brands: "",
+  models: "",
   price_min: "",
   price_max: "",
   year_min: "",
@@ -151,12 +176,16 @@ export const EMPTY_FILTERS: FiltersState = {
   year_calendar: "",
   mileage_max_km: "",
   location_contains: "",
+  fuel: "",
+  transmission: "",
+  body_type: "",
 };
 
 export function filtersToParams(f: FiltersState): URLSearchParams {
   const p = new URLSearchParams();
   if (f.platforms.length) p.set("platforms", f.platforms.join(","));
   if (f.brands.trim()) p.set("brands", f.brands.trim());
+  if (f.models.trim()) p.set("models", f.models.trim());
   if (f.price_min) p.set("price_min", f.price_min);
   if (f.price_max) p.set("price_max", f.price_max);
   if (f.year_min) p.set("year_min", f.year_min);
@@ -165,7 +194,28 @@ export function filtersToParams(f: FiltersState): URLSearchParams {
   if (f.mileage_max_km) p.set("mileage_max_km", f.mileage_max_km);
   if (f.location_contains.trim())
     p.set("location_contains", f.location_contains.trim());
+  if (f.fuel.trim()) p.set("fuel", f.fuel.trim());
+  if (f.transmission.trim()) p.set("transmission", f.transmission.trim());
+  if (f.body_type.trim()) p.set("body_type", f.body_type.trim());
   return p;
+}
+
+export function filtersActiveCount(f: FiltersState): number {
+  let n = 0;
+  if (f.platforms.length) n += f.platforms.length;
+  if (f.brands.trim()) n += 1;
+  if (f.models.trim()) n += 1;
+  if (f.price_min) n += 1;
+  if (f.price_max) n += 1;
+  if (f.year_min) n += 1;
+  if (f.year_max) n += 1;
+  if (f.year_calendar) n += 1;
+  if (f.mileage_max_km) n += 1;
+  if (f.location_contains.trim()) n += 1;
+  if (f.fuel.trim()) n += 1;
+  if (f.transmission.trim()) n += 1;
+  if (f.body_type.trim()) n += 1;
+  return n;
 }
 
 export function filtersToBody(f: FiltersState): Record<string, unknown> {

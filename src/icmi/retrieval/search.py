@@ -45,6 +45,9 @@ class SearchFilters(BaseModel):
     year_calendar: str | None = None  # "shamsi" | "gregorian" | "unknown"
     mileage_max_km: int | None = None
     location_contains: str | None = None
+    fuel: list[str] = Field(default_factory=list)
+    transmission: list[str] = Field(default_factory=list)
+    body_type: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_ranges(self) -> SearchFilters:
@@ -73,6 +76,9 @@ class SearchFilters(BaseModel):
                 self.year_calendar is not None,
                 self.mileage_max_km is not None,
                 self.location_contains,
+                self.fuel,
+                self.transmission,
+                self.body_type,
             ]
         )
 
@@ -146,6 +152,15 @@ def _apply_filters(metadata: pd.DataFrame, filters: SearchFilters) -> pd.DataFra
         mask &= metadata["year_calendar"] == filters.year_calendar
     if filters.mileage_max_km is not None:
         mask &= metadata["mileage_km"].notna() & (metadata["mileage_km"] <= filters.mileage_max_km)
+    if filters.fuel:
+        wanted = {f.strip() for f in filters.fuel}
+        mask &= metadata["fuel_raw"].map(lambda v: bool(v) and v.strip() in wanted)
+    if filters.transmission:
+        wanted = {t.strip() for t in filters.transmission}
+        mask &= metadata["transmission_raw"].map(lambda v: bool(v) and v.strip() in wanted)
+    if filters.body_type:
+        wanted = {b.strip() for b in filters.body_type}
+        mask &= metadata["body_type_raw"].map(lambda v: bool(v) and v.strip() in wanted)
     if filters.location_contains:
         needle = normalize_for_key(filters.location_contains)
         mask &= metadata["location_raw"].map(
@@ -176,6 +191,27 @@ def rank_subset(
     return [(int(subset_positions[i]), float(sims[i])) for i in order]
 
 
+def _browse_order(
+    metadata: pd.DataFrame,
+    subset_positions: np.ndarray,
+    sort: str,
+) -> list[tuple[int, float]]:
+    """Filter-only browsing: order the subset without semantic ranking."""
+    df = metadata.iloc[subset_positions] if len(subset_positions) else metadata.iloc[0:0]
+    if sort == "price_asc":
+        ordered = df.sort_values("price_amount", ascending=True, na_position="last")
+    elif sort == "price_desc":
+        ordered = df.sort_values("price_amount", ascending=False, na_position="last")
+    elif sort == "year_desc":
+        ordered = df.sort_values("year_num", ascending=False, na_position="last")
+    else:  # newest (default browse order)
+        if "first_seen_at" in df.columns:
+            ordered = df.sort_values("first_seen_at", ascending=False, na_position="last")
+        else:
+            ordered = df.sort_index(ascending=False)
+    return [(int(pos), 0.0) for pos in ordered.index]
+
+
 class SearchService:
     """Semantic + hybrid search over a persisted index."""
 
@@ -192,12 +228,12 @@ class SearchService:
         offset: int = 0,
         sort: str = "relevance",
     ) -> SearchResponse:
-        """Rank the ENTIRE filtered subset, then paginate.
+        """Semantic/hybrid search, or filter-only browsing when the query is
+        empty. Ranking always covers the ENTIRE filtered subset; pagination
+        slices afterwards — page 2 is a true continuation of page 1.
 
-        Pagination never loosens filters and never re-ranks per page — page 2
-        is a true continuation of page 1. `sort` may reorder the ranked subset
-        by structured fields (relevance | price_asc | price_desc | year_desc).
-        """
+        sort: relevance | price_asc | price_desc | year_desc | newest.
+        Empty query → browse mode (no semantic ranking; newest by default)."""
         filters = filters or SearchFilters()
         filtered = (
             _apply_filters(self.metadata, filters)
@@ -205,12 +241,23 @@ class SearchService:
             else self.metadata
         )
         subset_positions = filtered.index.to_numpy()
+        total_matched = len(subset_positions)
 
-        query_vector = self.encoder.encode_query(query)
-        ranked = rank_subset(query_vector, self.vectors, subset_positions)
-        total_matched = len(ranked)
+        query_stripped = (query or "").strip()
+        if query_stripped:
+            query_vector = self.encoder.encode_query(query_stripped)
+            ranked = rank_subset(query_vector, self.vectors, subset_positions)
+        else:
+            ranked = _browse_order(self.metadata, subset_positions, sort)
 
-        if sort in ("price_asc", "price_desc", "year_desc"):
+        if query_stripped and sort == "newest":
+            # semantic match + newest-first ordering (by first-seen)
+            meta_by_pos = {
+                pos: self.metadata.iloc[pos]["first_seen_at"]
+                for pos, _ in ranked
+            }
+            ranked = sorted(ranked, key=lambda item: meta_by_pos[item[0]], reverse=True)
+        elif query_stripped and sort in ("price_asc", "price_desc", "year_desc"):
             def sort_key(item: tuple[int, float]):
                 row = self.metadata.iloc[item[0]]
                 if sort == "price_asc":

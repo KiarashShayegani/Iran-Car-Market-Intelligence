@@ -98,3 +98,34 @@ def test_stats_includes_mileage_distribution(tmp_path, monkeypatch):
     result = market_stats(store)
     buckets = set(result["by_mileage"]["mileage_bucket"])
     assert "0-30k" in buckets and "30-60k" in buckets and "100-150k" in buckets
+
+
+def test_browse_mode_empty_query_with_filters(tmp_path, monkeypatch):
+    """Filter-only browsing: empty query + filters returns filtered listings
+    ordered by the sort field — no semantic ranking, filters still hard."""
+    monkeypatch.setenv("ICMI_DATA_DIR", str(tmp_path / "data3"))
+    import numpy as np
+
+    from icmi.retrieval.search import SearchFilters, SearchService
+    from tests.fakes import HashingEncoder
+
+    store = CanonicalStore()
+    make_listing(store, "x1", brand="پژو", model="206", year=1398, price="700,000,000")
+    make_listing(store, "x2", brand="پژو", model="206", year=1399, price="900,000,000")
+    make_listing(store, "x3", brand="تویوتا", model="کرولا", year=2015, price="2,000,000,000")
+    from icmi.retrieval.index import build_index_metadata
+    chunks = build_index_metadata(store)
+    encoder = HashingEncoder()
+    vectors = np.asarray(encoder.encode_passages([c.normalized_text for c in chunks]))
+    import pandas as pd
+    metadata = pd.DataFrame([vars(c) for c in chunks])
+    service = SearchService(vectors, metadata, encoder)
+
+    response = service.search("", SearchFilters(brands=["پژو"]), top_k=10)
+    assert response.candidates_after_filters == 2
+    keys = [r.listing_key for r in response.results]
+    # browse order (same-second timestamps → either order valid)
+    assert sorted(keys) == ["bama:x1", "bama:x2"]
+    # deterministic ordering via explicit sort:
+    priced = service.search("", SearchFilters(brands=["پژو"]), top_k=10, sort="price_desc")
+    assert [r.listing_key for r in priced.results] == ["bama:x2", "bama:x1"]

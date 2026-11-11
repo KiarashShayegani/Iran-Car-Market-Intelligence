@@ -47,6 +47,10 @@ class IndexedChunk:
     brand_raw: str | None
     model_raw: str | None
     trim_raw: str | None
+    fuel_raw: str | None
+    transmission_raw: str | None
+    body_type_raw: str | None
+    body_condition_raw: str | None
     brand_key: str  # normalize_for_key(brand_raw) — filter matching key
     model_key: str
     year_num: int | None
@@ -55,6 +59,7 @@ class IndexedChunk:
     mileage_km: int | None
     location_raw: str | None
     image_urls_json: str | None
+    first_seen_at: str
 
 
 def _metadata_frame(store) -> pd.DataFrame:
@@ -65,7 +70,8 @@ def _metadata_frame(store) -> pd.DataFrame:
         SELECT listing_key, original_url, raw_payload_ref_json, extraction_version,
                brand_raw, model_raw, year_raw, mileage_raw, price_amount, location_raw,
                brand_key, model_key, year_num, year_calendar, mileage_km,
-               image_urls_json, trim_raw
+               image_urls_json, trim_raw, fuel_raw, transmission_raw,
+               body_type_raw, body_condition_raw, first_seen_at
         FROM listings
         """
     )
@@ -96,6 +102,10 @@ def build_index_metadata(store) -> list[IndexedChunk]:
                 brand_raw=listing["brand_raw"],
                 model_raw=listing["model_raw"],
                 trim_raw=listing["trim_raw"],
+                fuel_raw=listing["fuel_raw"],
+                transmission_raw=listing["transmission_raw"],
+                body_type_raw=listing["body_type_raw"],
+                body_condition_raw=listing["body_condition_raw"],
                 brand_key=listing["brand_key"],
                 model_key=listing["model_key"],
                 year_num=listing["year_num"],
@@ -104,6 +114,7 @@ def build_index_metadata(store) -> list[IndexedChunk]:
                 mileage_km=listing["mileage_km"],
                 location_raw=listing["location_raw"],
                 image_urls_json=listing["image_urls_json"],
+                first_seen_at=listing["first_seen_at"],
             )
         )
     return chunks

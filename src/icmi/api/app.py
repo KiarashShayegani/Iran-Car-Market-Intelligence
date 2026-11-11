@@ -175,7 +175,9 @@ def create_app(
 
     @app.get("/facets")
     def facets() -> dict:
-        """Brand/model discovery + platform counts + freshness for the homepage."""
+        """Database-driven filter facets: brands with nested models, spec
+        values, top locations, platform counts, freshness. Never invents
+        options that are not present in the data."""
         store = get_store()
         brands = store.query_df(
             """
@@ -184,26 +186,72 @@ def create_app(
             GROUP BY brand_key ORDER BY count DESC
             """
         )
+        models = store.query_df(
+            """
+            SELECT brand_key, model_raw, COUNT(*) AS count
+            FROM listings WHERE brand_key IS NOT NULL AND model_raw IS NOT NULL
+            GROUP BY brand_key, model_raw ORDER BY count DESC
+            """
+        )
+        models_by_brand: dict[str, list] = {}
+        for _, r in models.iterrows():
+            models_by_brand.setdefault(r["brand_key"], []).append(
+                {"label": r["model_raw"], "count": int(r["count"])}
+            )
         platforms = store.query_df(
             "SELECT source_platform, COUNT(*) AS count FROM listings GROUP BY source_platform"
+        )
+
+        def distinct(column: str) -> list[str]:
+            rows = store.query_df(
+                f"SELECT DISTINCT {column} AS v FROM listings WHERE {column} IS NOT NULL ORDER BY v"
+            )
+            return [str(r["v"]) for _, r in rows.iterrows() if r["v"]]
+
+        locations = store.query_df(
+            """
+            SELECT location_raw, COUNT(*) AS count
+            FROM listings WHERE location_raw IS NOT NULL
+            GROUP BY location_raw ORDER BY count DESC LIMIT 20
+            """
         )
         bounds = store.query_df(
             """
             SELECT MIN(first_seen_at) AS oldest, MAX(first_seen_at) AS newest,
                    SUM(CASE WHEN price_amount IS NOT NULL THEN 1 ELSE 0 END) AS priced,
-                   COUNT(*) AS total
+                   COUNT(*) AS total,
+                   MIN(price_amount) AS min_price, MAX(price_amount) AS max_price,
+                   MIN(year_num) AS min_year, MAX(year_num) AS max_year
             FROM listings
             """
         ).iloc[0]
         return {
             "brands": [
-                {"key": r["brand_key"], "label": r["brand_raw"], "count": int(r["count"])}
+                {
+                    "key": r["brand_key"],
+                    "label": r["brand_raw"],
+                    "count": int(r["count"]),
+                    "models": models_by_brand.get(r["brand_key"], []),
+                }
                 for _, r in brands.iterrows()
+            ],
+            "fuel": distinct("fuel_raw"),
+            "transmission": distinct("transmission_raw"),
+            "body_type": distinct("body_type_raw"),
+            "locations": [
+                {"label": r["location_raw"], "count": int(r["count"])}
+                for _, r in locations.iterrows()
             ],
             "platforms": [
                 {"platform": r["source_platform"], "count": int(r["count"])}
                 for _, r in platforms.iterrows()
             ],
+            "bounds": {
+                "min_price": _int_safe(bounds["min_price"]),
+                "max_price": _int_safe(bounds["max_price"]),
+                "min_year": _int_safe(bounds["min_year"]),
+                "max_year": _int_safe(bounds["max_year"]),
+            },
             "freshness": {
                 "oldest_collection": bounds["oldest"],
                 "newest_collection": bounds["newest"],
@@ -272,12 +320,16 @@ def create_app(
 
     @app.get("/search")
     def search(
-        q: str = Query(min_length=1),
+        q: str = Query(default=""),
         top_k: int = Query(default=12, ge=1, le=50),
         offset: int = Query(default=0, ge=0),
         sort: str = Query(default="relevance"),
         platforms: str | None = None,
         brands: str | None = None,
+        models: str | None = None,
+        fuel: str | None = None,
+        transmission: str | None = None,
+        body_type: str | None = None,
         price_min: int | None = None,
         price_max: int | None = None,
         year_min: int | None = None,
@@ -289,6 +341,18 @@ def create_app(
         filters = SearchFilters(
             platforms=[p.strip() for p in platforms.split(",") if p.strip()] if platforms else [],
             brands=[b.strip() for b in brands.split(",") if b.strip()] if brands else [],
+            models=[m.strip() for m in models.split(",") if m.strip()] if models else [],
+            fuel=[f.strip() for f in fuel.split(",") if f.strip()] if fuel else [],
+            transmission=(
+                [t.strip() for t in transmission.split(",") if t.strip()]
+                if transmission
+                else []
+            ),
+            body_type=(
+                [b.strip() for b in body_type.split(",") if b.strip()]
+                if body_type
+                else []
+            ),
             price_min=price_min,
             price_max=price_max,
             year_min=year_min,
@@ -297,7 +361,7 @@ def create_app(
             mileage_max_km=mileage_max_km,
             location_contains=location_contains,
         )
-        if sort not in ("relevance", "price_asc", "price_desc", "year_desc"):
+        if sort not in ("relevance", "price_asc", "price_desc", "year_desc", "newest"):
             raise HTTPException(status_code=400, detail=f"unknown sort: {sort}")
         service = get_search_service()
         response = service.search(q, filters, top_k=top_k, offset=offset, sort=sort)
@@ -318,6 +382,11 @@ def create_app(
                     "brand_raw": None if meta is None else _nan_safe(meta["brand_raw"]),
                     "model_raw": None if meta is None else _nan_safe(meta["model_raw"]),
                     "trim_raw": None if meta is None else _nan_safe(meta["trim_raw"]),
+                    "fuel_raw": None if meta is None else _nan_safe(meta["fuel_raw"]),
+                    "transmission_raw": (
+                        None if meta is None else _nan_safe(meta["transmission_raw"])
+                    ),
+                    "body_type_raw": None if meta is None else _nan_safe(meta["body_type_raw"]),
                     "year_num": None if meta is None else _int_safe(meta["year_num"]),
                     "year_calendar": None if meta is None else _nan_safe(meta["year_calendar"]),
                     "price_amount": None if meta is None else _int_safe(meta["price_amount"]),
@@ -327,9 +396,14 @@ def create_app(
             )
             if meta is not None and meta.get("image_urls_json"):
                 results[-1]["image_url"] = _first_image(meta["image_urls_json"])
+        mode = (
+            "browse" if not response.query.strip()
+            else "hybrid" if not response.filters.is_empty()
+            else "semantic"
+        )
         return {
             "query": response.query,
-            "mode": "hybrid" if not response.filters.is_empty() else "semantic",
+            "mode": mode,
             "total_corpus": response.total_corpus,
             "candidates_after_filters": response.candidates_after_filters,
             "total_matched": response.total_matched,

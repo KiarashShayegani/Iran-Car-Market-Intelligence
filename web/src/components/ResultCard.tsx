@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { GitCompare } from "lucide-react";
 import {
-  PLATFORM_LABELS,
   SearchResultItem,
   formatNumber,
   formatToman,
@@ -13,6 +12,7 @@ import {
   toggleCompareKey,
 } from "@/lib/api";
 import VehicleImage from "@/components/VehicleImage";
+import PlatformMark from "@/components/PlatformMark";
 
 export default function ResultCard({ result }: { result: SearchResultItem }) {
   const [platform, id] = result.listing_key.split(":");
@@ -42,9 +42,7 @@ export default function ResultCard({ result }: { result: SearchResultItem }) {
         />
         <div className="p-3">
           <div className="flex items-center justify-between gap-2">
-            <span className={`chip platform-${result.source_platform}`}>
-              {PLATFORM_LABELS[result.source_platform] ?? result.source_platform}
-            </span>
+            <PlatformMark platform={result.source_platform} />
             <span
               className={`chip ${band.className}`}
               title={`شباهت معنایی خام: ${result.score.toFixed(4)} (uncalibrated)`}
