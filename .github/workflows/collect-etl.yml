@@ -55,22 +55,16 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Collect + refresh views (unified pipeline, mode=ci)
+      - name: Collect all platforms (unified pipeline, mode=ci)
         run: |
-          platforms=$(echo "${{ inputs.platforms }}" | tr ',' ' ')
-          overall=0
-          for p in $platforms; do
-            echo "::group::pipeline: $p"
-            if ! uv run python scripts/pipeline.py collect all --mode ci \
-                --platforms "$p" \
-                --max-pages "${{ inputs.max_pages }}" \
-                --target-listings "${{ inputs.target_listings }}"; then
-              echo "$p: pipeline FAILED — continuing with other platforms"
-              overall=1
-            fi
-            echo "::endgroup::"
-          done
-          exit $overall
+          uv run python scripts/pipeline.py collect --mode ci \
+            --platforms "${{ inputs.platforms }}" \
+            --max-pages "${{ inputs.max_pages }}" \
+            --target-listings "${{ inputs.target_listings }}"
+
+      - name: Refresh views ONCE after all collection (ingest→export→documents→index)
+        run: |
+          uv run python scripts/pipeline.py all --mode ci
 
       # Manifests travel via ARTIFACTS (owner decision, G4 revision) —
       # git is not used for data/manifest transfer. record_manifest.py
