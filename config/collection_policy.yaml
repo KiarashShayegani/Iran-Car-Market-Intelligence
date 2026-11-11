@@ -1,0 +1,71 @@
+# ICMI Collection Policy — per-source operational budgets.
+#
+# These are MAXIMUM targets per run, not guaranteed yields. The policy is
+# loaded and validated before any collection executes; a disabled source
+# must never run. Schedules remain disabled at the workflow level (owner
+# gate, H-ops-5).
+#
+# rotation: for sources with presets, the number of presets per run and the
+# deterministic rotation order. "full" preset runs are separate.
+
+schema_version: 1
+
+defaults:
+  request_delay_seconds: 2.0
+  request_jitter_seconds: 1.0
+  max_retries: 3
+  backoff_multiplier: 2
+  timeout_seconds: 30
+  max_execution_minutes: 20
+  stale_page_streak: 3
+
+sources:
+  bama:
+    enabled: true
+    cadence: daily
+    max_listings_per_run: 240
+    max_pages_per_preset: 5
+    max_requests_per_run: 30
+    presets_per_run: 4
+    rotation: deterministic   # presets rotate in listed order
+    presets:
+      - brand-pride
+      - brand-peugeot
+      - brand-shahin
+      - brand-tara
+      - brand-dena
+      - brand-quick
+      - brand-saina
+      - brand-kia
+      - brand-toyota
+      - brand-kmc
+      - brand-fownix
+      - brand-lamari
+      - brand-lucano
+      - brand-reera
+
+  sheypoor:
+    enabled: true
+    cadence: daily
+    max_listings_per_run: 60
+    max_pages_per_run: 3
+    max_requests_per_run: 5
+    presets: []               # full feed, cursor pagination
+
+  hamrah_mechanic:
+    enabled: true
+    cadence: 2-3_per_week
+    max_listings_per_run: 60
+    max_pages_per_run: 3
+    max_requests_per_run: 5
+    presets: []
+
+  divar:
+    enabled: false
+    cadence: manual
+    gated: browser-capture-investigation
+
+  karnameh:
+    enabled: false
+    cadence: manual
+    gated: listing-identity
