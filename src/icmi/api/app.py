@@ -260,6 +260,41 @@ def create_app(
             },
         }
 
+    @app.get("/analytics")
+    def analytics(
+        brands: str | None = None,
+        models: str | None = None,
+        year_min: int | None = None,
+        year_max: int | None = None,
+        year_calendar: str | None = None,
+        platforms: str | None = None,
+        fuel: str | None = None,
+        transmission: str | None = None,
+        mileage_max_km: int | None = None,
+        price_min: int | None = None,
+        price_max: int | None = None,
+    ) -> dict:
+        """Interactive market-dashboard aggregations with dynamic filters."""
+        from icmi.analytics.dashboard import AnalyticsFilters, build_dashboard
+
+        f = AnalyticsFilters(
+            brand_keys=[b.strip() for b in brands.split(",") if b.strip()] if brands else [],
+            models=[m.strip() for m in models.split(",") if m.strip()] if models else [],
+            year_min=year_min,
+            year_max=year_max,
+            year_calendar=year_calendar,
+            platforms=[p.strip() for p in platforms.split(",") if p.strip()] if platforms else [],
+            fuel=[x.strip() for x in fuel.split(",") if x.strip()] if fuel else [],
+            transmission=(
+                [x.strip() for x in transmission.split(",") if x.strip()]
+                if transmission else []
+            ),
+            mileage_max_km=mileage_max_km,
+            price_min=price_min,
+            price_max=price_max,
+        )
+        return build_dashboard(get_store(), f)
+
     @app.get("/compare")
     def compare(
         keys: str = Query(min_length=1), limit: int = Query(default=6, ge=1, le=20)

@@ -1,5 +1,5 @@
-import StatsPanel from "@/components/StatsPanel";
+import AnalyticsPanel from "@/components/AnalyticsPanel";
 
 export default function StatsPage() {
-  return <StatsPanel />;
+  return <AnalyticsPanel />;
 }

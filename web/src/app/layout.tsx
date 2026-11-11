@@ -5,7 +5,7 @@ import Nav from "@/components/Nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "بازاربان | ICMI — هوش بازار خودرو ایران",
+  title: "خودروبان | ICMI — هوش بازار خودرو ایران",
   description:
     "بازار هوشمند آگهی‌های خودرو: جستجوی معنایی چندمنبعی، آمار بازار، تخمین قیمت و پرسش‌وپاسخ مبتنی بر شواهد",
 };
@@ -30,9 +30,9 @@ export default function RootLayout({
         >
           <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 flex-wrap">
             <Link href="/" className="flex items-center gap-2.5">
-              <img src="/bazargan-mark.svg" alt="بازاربان" className="h-9 w-9" />
+              <img src="/khodroban-mark.svg" alt="خودروبان" className="h-9 w-9" />
               <div>
-                <p className="text-base font-extrabold leading-5 tracking-tight">بازاربان</p>
+                <p className="text-base font-extrabold leading-5 tracking-tight">خودروبان</p>
                 <p className="text-[10px] font-medium tracking-widest" style={{ color: "var(--accent-text)" }}>
                   ICMI
                 </p>
