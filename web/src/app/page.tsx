@@ -43,7 +43,7 @@ export default function Home() {
         className="p-8 text-center rounded-[1.1rem]"
         style={{ background: "var(--gradient-hero)", color: "#fff" }}
       >
-        <h1 className="text-2xl font-bold tracking-tight">بازار هوشمند خودرو ایران</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight">بازار هوشمند خودرو ایران</h1>
         <p className="mt-2 text-sm" style={{ color: "rgba(255,255,255,0.82)" }}>
           جستجوی معنایی آگهی‌ها از باما، شیپور و همراه‌مکانیک — با فیلترهای
           دقیق و ارجاع به آگهی اصلی

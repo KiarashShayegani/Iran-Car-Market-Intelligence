@@ -1,35 +1,48 @@
 @import "tailwindcss";
 
-/* ICMI design tokens — modern, minimal, confident.
-   Palette: deep emerald primary with a cool cyan-blue gradient partner,
-   warm neutrals for surfaces, restrained amber for platform warmth. */
+/* ICMI | بازاربان design tokens — Direction C (Petrol Blue + Warm Amber)
+   Distinctive automotive/financial-intelligence identity.
+   Amber has a dedicated text-safe variant (WCAG-aware). */
 :root {
-  --background: #f6f8fa;
-  --foreground: #0b1220;
+  /* surfaces */
+  --background: #f6f7f7;
+  --foreground: #202d32;
   --card: #ffffff;
-  --border: #e3e9f0;
-  --muted: #5b6b7f;
-  --bg-muted: #eef2f7;
+  --border: #dfe6e3;
+  --muted: #5e6e76;
+  --bg-muted: #eef1f0;
 
-  /* brand accents */
-  --accent: #0e7c6b;
-  --accent-hover: #0b6355;
-  --accent-soft: #e6f7f3;
-  --accent-2: #0e7490;      /* cyan-blue gradient partner */
-  --gradient-brand: linear-gradient(135deg, #0e7c6b 0%, #0e7490 100%);
-  --gradient-hero: linear-gradient(135deg, #0b1220 0%, #113a36 55%, #0e7490 100%);
+  /* brand */
+  --primary: #123c46;        /* petrol blue */
+  --secondary: #176b70;      /* deep teal */
+  --accent: #e6a23c;         /* warm amber (fills) */
+  --accent-text: #a86a14;    /* text-safe amber */
+  --accent-soft: #fdf3e3;
+  --teal-soft: #e3f1f0;
+  --gradient-brand: linear-gradient(135deg, #123c46 0%, #176b70 100%);
+  --gradient-brand-wide: linear-gradient(120deg, #123c46 0%, #176b70 55%, #1e8a8f 100%);
+  --gradient-hero: linear-gradient(135deg, #123c46 0%, #14484f 55%, #176b70 100%);
 
   /* semantic */
-  --danger: #b91c1c;
-  --warning-bg: #fef3c7;
-  --warning-text: #92400e;
-  --info-bg: #e0e7ff;
-  --info-text: #4338ca;
+  --danger: #b3402e;
+  --danger-soft: #fbeae7;
+  --warning-bg: #fdf3e3;
+  --warning-text: #8a5a10;
+  --info-bg: #e3f1f0;
+  --info-text: #176b70;
+  --success: #2c7a5b;
+
+  /* charts (distinguishable series, light-theme safe) */
+  --chart-1: #176b70;
+  --chart-2: #e6a23c;
+  --chart-3: #5a7da0;
+  --chart-4: #b0576b;
+  --chart-5: #7c9a5c;
 
   /* elevation */
-  --shadow-sm: 0 1px 2px 0 rgb(11 18 32 / 0.06);
-  --shadow-md: 0 6px 18px -4px rgb(11 18 32 / 0.1);
-  --shadow-lg: 0 14px 34px -8px rgb(11 18 32 / 0.18);
+  --shadow-sm: 0 1px 2px 0 rgb(18 60 70 / 0.07);
+  --shadow-md: 0 6px 18px -4px rgb(18 60 70 / 0.12);
+  --shadow-lg: 0 14px 34px -8px rgb(18 60 70 / 0.2);
 }
 
 body {
@@ -51,7 +64,7 @@ body {
 .card-hover:hover {
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
-  border-color: #c9d6e2;
+  border-color: #c6d3cf;
 }
 
 .chip {
@@ -65,25 +78,25 @@ body {
 }
 
 .platform-bama {
-  background: linear-gradient(120deg, #fef3c7, #fde68a);
-  color: #92400e;
+  background: linear-gradient(120deg, #fdf3e3, #fae3bc);
+  color: #8a5a10;
 }
 .platform-sheypoor {
-  background: linear-gradient(120deg, #dbeafe, #bfdbfe);
-  color: #1e40af;
+  background: linear-gradient(120deg, #e3f1f0, #d0e6e4);
+  color: #123c46;
 }
 .platform-hamrah_mechanic {
-  background: linear-gradient(120deg, #dcfce7, #bbf7d0);
-  color: #166534;
+  background: linear-gradient(120deg, #e8f0e6, #d8e6d2);
+  color: #42632e;
 }
 
 .score-high {
-  background: linear-gradient(120deg, #ccfbf1, #d1fae5);
-  color: #0b6355;
+  background: linear-gradient(120deg, #e3f1f0, #d0e6e4);
+  color: #123c46;
 }
 .score-mid {
-  background: linear-gradient(120deg, #e0e7ff, #dbeafe);
-  color: #4338ca;
+  background: linear-gradient(120deg, #fdf3e3, #fae3bc);
+  color: #8a5a10;
 }
 .score-low {
   background: var(--bg-muted);
@@ -118,8 +131,8 @@ input:focus,
 select:focus,
 textarea:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--secondary);
+  box-shadow: 0 0 0 3px var(--teal-soft);
 }
 
 .btn {
@@ -134,7 +147,7 @@ textarea:focus {
   box-shadow: var(--shadow-sm);
 }
 .btn:hover:not(:disabled) {
-  filter: brightness(1.08);
+  filter: brightness(1.12);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
@@ -155,8 +168,14 @@ textarea:focus {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .btn-secondary:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
+  background: var(--teal-soft);
+  border-color: var(--secondary);
+}
+
+.btn-amber {
+  background: linear-gradient(120deg, #e6a23c, #d98f1f);
+  color: #231703;
+  font-weight: 700;
 }
 
 .tab-active {
