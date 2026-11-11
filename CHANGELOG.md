@@ -1,5 +1,42 @@
 # Changelog
 
+## [3.2.0] — 2026-11-11
+
+### G1 — Marketplace foundation
+- Image-first marketplace UI: direct CDN rendering with cache-aside proxy
+  fallback (bounded, allowlisted, configurable), listing detail pages with
+  gallery/price history/similar ads/provenance, homepage with real inventory
+  and freshness strip, backend offset pagination + structured sorting,
+  qualitative relevance bands (raw cosine never shown as a percentage)
+
+### G2 — Intelligence surfaces
+- Vehicle comparison (`/compare` + selection bar), dashboard platform +
+  mileage distributions, QA markdown rendering, estimate outlier-trim
+  option with small-sample guard
+
+### G3 — Data-ops hardening
+- Unified pipeline (`scripts/pipeline.py`) behind all execution modes;
+  portable PID-liveness file locking; atomic index writes; ops-status CLI +
+  `/ops-status`; verified backup/restore drill; image-proxy DNS/IP guard;
+  SHA256-verified artifacts
+
+### G4 — Actions activation & validation (all experiments passed)
+- **GitHub Actions proven viable as cloud data worker**: A0 env probe,
+  A1 1-page collection × 3 platforms (all succeed from US runners),
+  B pride preset 60 records, C full pipeline on runner in 90 s (138
+  listings incl. on-runner e5 encoding), D artifact→local import with
+  idempotence, E linear scale to 150 records, F failure/recovery suite,
+  G local/cloud equivalence (0 mismatches)
+- Manifests travel via versioned artifacts (git carries code only)
+
+### G5 — Collection expansion
+- Bama brand presets (14) verified live end-to-end (solves rotating-feed
+  enumeration); Divar investigation: envelope cracked, filter shapes gated
+  on browser traffic capture; Karnameh re-probed: still deferred
+
+[3.2.0]: https://github.com/KiarashShayegani/Iran-Car-Market-Intelligence/releases
+
+
 ## [3.1.0] — 2026-11-10
 
 ### F5 — Price estimation, UI upgrades
