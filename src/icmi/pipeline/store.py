@@ -21,6 +21,9 @@ import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# retrieval.normalization is a leaf utility (no project imports) — the
+# matching-key function lives there and is safe to use from the pipeline.
+from icmi.core.brand_aliases import canonical_brand
 from icmi.core.paths import canonical_dir
 from icmi.core.records import CanonicalRecord, has_value
 from icmi.pipeline.normalize import (
@@ -30,9 +33,6 @@ from icmi.pipeline.normalize import (
     normalize_price_amount,
     normalize_year,
 )
-
-# retrieval.normalization is a leaf utility (no project imports) — the
-# matching-key function lives there and is safe to use from the pipeline.
 from icmi.retrieval.normalization import normalize_for_key
 
 
@@ -153,6 +153,7 @@ class CanonicalStore:
             "mileage_km": "INTEGER",
             "brand_key": "TEXT",
             "model_key": "TEXT",
+            "brand_canonical": "TEXT",
         }
         for name, col_type in additions.items():
             if name not in existing:
@@ -235,11 +236,12 @@ class CanonicalStore:
                     source_attributes_json, raw_payload_ref_json,
                     extraction_errors_json, first_seen_at, last_seen_at,
                     scraped_at, extraction_version, updated_at,
-                    year_num, year_calendar, mileage_km, brand_key, model_key
+                    year_num, year_calendar, mileage_km, brand_key, model_key,
+                    brand_canonical
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?
                 )
                 ON CONFLICT(listing_key) DO UPDATE SET
                     original_url=excluded.original_url,
@@ -278,6 +280,7 @@ class CanonicalStore:
                     mileage_km=excluded.mileage_km,
                     brand_key=excluded.brand_key,
                     model_key=excluded.model_key,
+                    brand_canonical=excluded.brand_canonical,
                     updated_at=excluded.updated_at
                 """,
                 self._listing_params(
@@ -345,11 +348,13 @@ class CanonicalStore:
         mileage_km = normalize_mileage_km(record.mileage_raw)
         if mileage_km is not None and mileage_km < 0:
             mileage_km = None
+        brand_key, brand_canonical = canonical_brand(record.brand_raw)
         return {
             "year_num": year_num,
             "year_calendar": classify_year_calendar(year_num),
             "mileage_km": mileage_km,
-            "brand_key": normalize_for_key(record.brand_raw) or None,
+            "brand_key": brand_key or None,
+            "brand_canonical": brand_canonical or None,
             "model_key": normalize_for_key(record.model_raw) or None,
         }
 
@@ -408,6 +413,7 @@ class CanonicalStore:
             derived["mileage_km"],
             derived["brand_key"],
             derived["model_key"],
+            derived["brand_canonical"],
         )
 
     def _refresh_current_price(self, key: str) -> None:

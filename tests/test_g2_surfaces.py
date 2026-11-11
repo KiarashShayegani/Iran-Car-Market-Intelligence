@@ -129,3 +129,80 @@ def test_browse_mode_empty_query_with_filters(tmp_path, monkeypatch):
     # deterministic ordering via explicit sort:
     priced = service.search("", SearchFilters(brands=["پژو"]), top_k=10, sort="price_desc")
     assert [r.listing_key for r in priced.results] == ["bama:x2", "bama:x1"]
+
+
+def test_incremental_invalidation_matrix(tmp_path, monkeypatch):
+    """H4 audit: incremental build must re-encode changed content, carry over
+    unchanged, drop deleted, and NEVER reuse vectors across models."""
+
+    from icmi.retrieval.incremental import incremental_index_build
+    from tests.fakes import HashingEncoder
+
+    monkeypatch.setenv("ICMI_DATA_DIR", str(tmp_path / "data"))
+    store = CanonicalStore()
+    make_listing(store, "i1", brand="پژو", model="206", year=1398, price="750,000,000")
+    make_listing(store, "i2", brand="پژو", model="پارس", year=1400, price="1,900,000,000")
+
+    enc = HashingEncoder()
+    result1 = incremental_index_build(
+        store, model_id="fake-hashing", out_dir=tmp_path / "idx",
+        full_rebuild=True, encoder=enc,
+    )
+    assert result1["total_chunks"] == 2 and result1["newly_encoded"] == 2
+
+    # 1) no changes → all carried
+    result2 = incremental_index_build(
+        store, model_id="fake-hashing", out_dir=tmp_path / "idx", encoder=enc
+    )
+    assert result2["carried_over"] == 2 and result2["newly_encoded"] == 0
+
+    # 2) changed description (content change) → re-encoded
+    conn = store._conn
+    conn.execute("UPDATE listings SET description = 'تغییر کرده' WHERE listing_key = 'bama:i1'")
+    conn.commit()
+    result3 = incremental_index_build(
+        store, model_id="fake-hashing", out_dir=tmp_path / "idx", encoder=enc
+    )
+    assert result3["newly_encoded"] >= 1
+
+    # 3) deleted listing → chunk dropped
+    conn.execute("DELETE FROM listings WHERE listing_key = 'bama:i2'")
+    conn.commit()
+    result4 = incremental_index_build(
+        store, model_id="fake-hashing", out_dir=tmp_path / "idx", encoder=enc
+    )
+    assert result4["total_chunks"] == 1
+
+    # 4) model change → full re-encode (never reuse incompatible vectors)
+    result5 = incremental_index_build(
+        store, model_id="other-model", out_dir=tmp_path / "idx", encoder=enc
+    )
+    assert result5["newly_encoded"] == result5["total_chunks"]
+
+
+def test_incremental_requires_model_match_in_saved_index(tmp_path, monkeypatch):
+    """A saved index built with model A must not silently feed model B carries."""
+    import numpy as np
+
+    from icmi.retrieval.index import build_index_metadata, load_index, save_index
+    from tests.fakes import HashingEncoder
+
+    monkeypatch.setenv("ICMI_DATA_DIR", str(tmp_path / "data"))
+    store = CanonicalStore()
+    make_listing(store, "s1", brand="پژو", model="206", year=1398, price="750,000,000")
+    chunks = build_index_metadata(store)
+    enc = HashingEncoder()
+    vectors = np.asarray(enc.encode_passages([c.normalized_text for c in chunks]))
+    save_index(vectors, chunks, "model-A", out_dir=tmp_path / "idx")
+
+    _, meta, info = load_index(tmp_path / "idx")
+    assert info["model_id"] == "model-A"
+    # a build with model B must not carry model-A vectors
+    from icmi.retrieval.incremental import incremental_index_build
+
+    incremental_index_build(
+        store, model_id="model-B", out_dir=tmp_path / "idx", encoder=enc
+    )
+    _, _, info2 = load_index(tmp_path / "idx")
+    assert info2["model_id"] == "model-B"
+

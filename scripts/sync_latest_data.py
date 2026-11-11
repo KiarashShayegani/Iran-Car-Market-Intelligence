@@ -67,6 +67,11 @@ def main(argv: list[str] | None = None) -> int:
         "--skip-ingest", action="store_true",
         help="copy artifacts only; do not ingest runs into the canonical DB",
     )
+    parser.add_argument(
+        "--skip-derived", action="store_true",
+        help="do not copy analytical parquet / index from the snapshot "
+        "(used when extraction versions may differ — raw runs still import)",
+    )
     parser.add_argument("--db", default=None, help="alternative canonical DB path")
     args = parser.parse_args(argv)
 
@@ -87,7 +92,9 @@ def main(argv: list[str] | None = None) -> int:
 
         # analytical snapshots (never authoritative)
         analytical = root / "analytical"
-        if analytical.is_dir() and any(analytical.glob("*.parquet")):
+        if args.skip_derived:
+            print("derived data copy skipped (--skip-derived)")
+        elif analytical.is_dir() and any(analytical.glob("*.parquet")):
             n = _copy_tree(analytical, analytical_dir())
             print(f"analytical parquet copied: {n} file(s)")
 

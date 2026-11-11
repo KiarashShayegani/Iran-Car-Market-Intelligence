@@ -10,6 +10,7 @@ correctness baseline, incrementality is an optimization.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -24,6 +25,7 @@ def incremental_index_build(
     model_id: str = DEFAULT_MODEL_ID,
     out_dir: Path | None = None,
     full_rebuild: bool = False,
+    encoder=None,
 ) -> dict:
     """Update the index in place; returns counts for the report."""
     from icmi.core.paths import index_dir as idx_dir
@@ -44,6 +46,17 @@ def incremental_index_build(
         except (ValueError, OSError):
             existing_meta, existing_vectors = None, None
 
+        # Model mismatch → vectors are in a different space and must NEVER be
+        # carried over (H4 audit: silent vector-space corruption).
+        info_path = out / "index_meta.json"
+        if info_path.is_file():
+            try:
+                info = json.loads(info_path.read_text(encoding="utf-8"))
+                if info.get("model_id") != model_id:
+                    existing_meta, existing_vectors = None, None
+            except (ValueError, OSError):
+                existing_meta, existing_vectors = None, None
+
     if full_rebuild or (
         existing_meta is not None and "content_hash" not in existing_meta.columns
     ):
@@ -58,7 +71,8 @@ def incremental_index_build(
             old_by_key[key] = existing_vectors[i]
             old_hash_by_key[key] = row["content_hash"]
 
-    encoder = get_encoder(model_id)
+    if encoder is None:
+        encoder = get_encoder(model_id)
     carry: list[np.ndarray] = []
     encode_positions: list[int] = []
     for pos, chunk in enumerate(chunks):

@@ -181,7 +181,7 @@ def create_app(
         store = get_store()
         brands = store.query_df(
             """
-            SELECT brand_key, brand_raw, COUNT(*) AS count
+            SELECT brand_key, brand_canonical AS label, COUNT(*) AS count
             FROM listings WHERE brand_key IS NOT NULL
             GROUP BY brand_key ORDER BY count DESC
             """
@@ -229,7 +229,7 @@ def create_app(
             "brands": [
                 {
                     "key": r["brand_key"],
-                    "label": r["brand_raw"],
+                    "label": r["label"],
                     "count": int(r["count"]),
                     "models": models_by_brand.get(r["brand_key"], []),
                 }

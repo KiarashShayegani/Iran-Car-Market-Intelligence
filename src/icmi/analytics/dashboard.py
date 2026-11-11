@@ -93,8 +93,8 @@ def build_dashboard(store: CanonicalStore, f: AnalyticsFilters) -> dict:
     base = store.query_df(
         f"""
         SELECT l.listing_key, l.source_platform, l.brand_raw, l.brand_key,
-               l.model_raw, l.year_num, l.year_calendar, l.mileage_km,
-               l.price_amount, l.first_seen_at
+               l.brand_canonical, l.model_raw, l.year_num, l.year_calendar,
+               l.mileage_km, l.price_amount, l.first_seen_at
         FROM listings l WHERE {where}
         """,
         params,
@@ -113,8 +113,8 @@ def build_dashboard(store: CanonicalStore, f: AnalyticsFilters) -> dict:
     prices = [int(v) for v in base["price_amount"].tolist()]
     mile = base[base["mileage_km"].notna()]
 
-    brands = base.groupby("brand_raw").size().sort_values(ascending=False)
-    models = base.groupby(["brand_raw", "model_raw"]).size().sort_values(ascending=False)
+    brands = base.groupby("brand_canonical").size().sort_values(ascending=False)
+    models = base.groupby(["brand_canonical", "model_raw"]).size().sort_values(ascending=False)
     platforms = base.groupby("source_platform").size()
     years = (
         base.dropna(subset=["year_num"])
@@ -172,7 +172,7 @@ def build_dashboard(store: CanonicalStore, f: AnalyticsFilters) -> dict:
             "median": _pct(prices, 0.5),
             "p25": _pct(prices, 0.25),
             "p75": _pct(prices, 0.75),
-            "brands": int(base["brand_raw"].nunique()),
+            "brands": int(base["brand_canonical"].nunique()),
             "models": int(base.groupby(["brand_raw", "model_raw"]).ngroups),
             "median_mileage": (
                 int(mile["mileage_km"].median()) if len(mile) else None

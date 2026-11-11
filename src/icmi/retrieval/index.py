@@ -54,6 +54,7 @@ class IndexedChunk:
     body_type_raw: str | None
     body_condition_raw: str | None
     brand_key: str  # normalize_for_key(brand_raw) — filter matching key
+    brand_canonical: str | None
     model_key: str
     year_num: int | None
     year_calendar: str | None
@@ -73,7 +74,7 @@ def _metadata_frame(store) -> pd.DataFrame:
                brand_raw, model_raw, year_raw, mileage_raw, price_amount, location_raw,
                brand_key, model_key, year_num, year_calendar, mileage_km,
                image_urls_json, trim_raw, fuel_raw, transmission_raw,
-               body_type_raw, body_condition_raw, first_seen_at
+               body_type_raw, body_condition_raw, first_seen_at, brand_canonical
         FROM listings
         """
     )
@@ -112,6 +113,7 @@ def build_index_metadata(store) -> list[IndexedChunk]:
                 body_type_raw=listing["body_type_raw"],
                 body_condition_raw=listing["body_condition_raw"],
                 brand_key=listing["brand_key"],
+                brand_canonical=listing["brand_canonical"],
                 model_key=listing["model_key"],
                 year_num=listing["year_num"],
                 year_calendar=listing["year_calendar"],

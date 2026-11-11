@@ -1,0 +1,30 @@
+# Manufacturer alias map — deterministic, reviewable normalization.
+# Keys: normalized variant (normalize_for_key applied by loader).
+# Values: canonical Persian brand label used for grouping/analytics.
+# brand_raw on every listing stays verbatim — this only affects the derived
+# brand_key/brand_canonical columns. Extend after observing new variants.
+aliases:
+  toyota: تویوتا
+  renault: رنو
+  hyundai: هیوندای
+  kia: کیا
+  kmc: کی ام سی
+  saipa: سایپا
+  irankhodro: ایران خودرو
+  modirankhodro: ام وی ام
+  nissan: نیسان
+  mazda: مزدا
+  volkswagen: فولکس
+  bmw: ب ام و
+  mercedesbenz: بنز
+  jac: جک
+  dongfeng: دونفنگ
+  changan: چانگان
+  kermanmotor: کرمان موتور
+  haima: هایما
+  lamari: لاماری
+  fownix: فونیکس
+  honda: هوندا
+  mg: ام جی
+  suzuki: سوزوکی
+  peugeot: پژو

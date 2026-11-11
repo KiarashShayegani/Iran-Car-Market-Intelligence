@@ -2,10 +2,11 @@
 """One-command sync from GitHub Actions artifacts into the local data layer.
 
 Finds the latest successful collect-etl Actions run, downloads its snapshot
-artifact, verifies it (zip CRC, SQLite integrity_check, manifest JSON),
-archives the current canonical DB, imports raw runs through the standard
-local ingestion (run-level skip + record-level idempotence; the runner DB is
-never merged), verifies idempotence with a second pass, and prints a report.
+artifact, verifies it (zip CRC + traversal, SQLite integrity_check, manifest
+JSON, extraction-version fingerprint), archives the current canonical DB,
+imports raw runs through the standard local ingestion (run-level skip +
+record-level idempotence; the runner DB is never merged), runs an
+idempotence probe (second import must change nothing), and prints a report.
 
 Requires GITHUB_TOKEN (Actions: read) — already in the repo .env.
 
@@ -62,6 +63,20 @@ def _find_run(token: str, run_id: int | None) -> dict:
     return run
 
 
+def _validate_members(zf: zipfile.ZipFile, root: Path) -> None:
+    """Defense-in-depth over zipfile's built-in sanitization: reject absolute
+    paths, '..' traversal, and members escaping the extraction root."""
+    root_resolved = root.resolve()
+    for name in zf.namelist():
+        if name.startswith("/"):
+            raise SystemExit(f"unsafe absolute zip member: {name}")
+        parts = Path(name).parts
+        if ".." in parts:
+            raise SystemExit(f"zip traversal attempt: {name}")
+        if not (root / name).resolve().is_relative_to(root_resolved):
+            raise SystemExit(f"zip member escapes root: {name}")
+
+
 def _download_snapshot(token: str, run_id: int, workdir: Path) -> tuple[Path, dict]:
     arts = requests.get(
         f"{GITHUB_API}/repos/{REPO}/actions/runs/{run_id}/artifacts",
@@ -79,12 +94,16 @@ def _download_snapshot(token: str, run_id: int, workdir: Path) -> tuple[Path, di
     artifact_zip = workdir / "artifact.zip"
     artifact_zip.write_bytes(r.content)
     with zipfile.ZipFile(artifact_zip) as zf:
+        if zf.testzip() is not None:
+            raise SystemExit("outer artifact zip is corrupt")
+        _validate_members(zf, workdir)
         zf.extractall(workdir)
     inner = next(workdir.rglob("icmi_snapshot_*.zip"))
     snapshot_dir = workdir / inner.stem
     with zipfile.ZipFile(inner) as zf:
         if zf.testzip() is not None:
             raise SystemExit("inner snapshot zip is corrupt")
+        _validate_members(zf, snapshot_dir)
         zf.extractall(snapshot_dir)
     print(
         f"artifact downloaded: {art['name']} | {len(r.content)//1024} KB compressed | "
@@ -93,12 +112,40 @@ def _download_snapshot(token: str, run_id: int, workdir: Path) -> tuple[Path, di
     return snapshot_dir, {"compressed_kb": len(r.content) // 1024, "download_seconds": duration}
 
 
-def _verify(snapshot_dir: Path) -> dict:
+def _extraction_fingerprint(snapshot_dir: Path) -> str | None:
+    """Extraction version recorded in the snapshot's manifests — used to gate
+    derived-data installation when the snapshot was built by incompatible
+    extraction logic."""
+    manifests = snapshot_dir / "manifests"
+    if not manifests.is_dir():
+        return None
+    for f in sorted(manifests.glob("*.json")):
+        try:
+            m = json.loads(f.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if m.get("extraction_version"):
+            return m["extraction_version"]
+    return None
+
+
+def _current_extraction_version() -> str:
+    from icmi.core.config import load_sources
+
+    return load_sources().pipeline.extraction_version
+
+
+def _verify(snapshot_dir: Path) -> tuple[dict, bool]:
+    """Returns (report, version_mismatch). Hard errors land in
+    report['errors']; a version mismatch is NOT a hard error — raw runs still
+    import, derived data is skipped."""
     report: dict = {"errors": []}
+    version_mismatch = False
+
     snap_db = snapshot_dir / "canonical" / "icmi.db"
     if not snap_db.is_file():
         report["errors"].append("no canonical/icmi.db in snapshot")
-        return report
+        return report, version_mismatch
     conn = sqlite3.connect(f"file:{snap_db}?mode=ro", uri=True)
     try:
         report["integrity"] = conn.execute("PRAGMA integrity_check").fetchone()[0]
@@ -108,6 +155,9 @@ def _verify(snapshot_dir: Path) -> dict:
         report["runs"] = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
     finally:
         conn.close()
+    if report["integrity"] != "ok":
+        report["errors"].append(f"snapshot DB integrity: {report['integrity']}")
+
     manifests = snapshot_dir / "manifests"
     if manifests.is_dir():
         for f in manifests.glob("*.json"):
@@ -115,23 +165,33 @@ def _verify(snapshot_dir: Path) -> dict:
                 json.loads(f.read_text(encoding="utf-8"))
             except ValueError:
                 report["errors"].append(f"corrupt manifest: {f.name}")
-    if report["integrity"] != "ok":
-        report["errors"].append(f"snapshot DB integrity: {report['integrity']}")
-    return report
+
+    fingerprint = _extraction_fingerprint(snapshot_dir)
+    report["extraction_version"] = fingerprint
+    current = _current_extraction_version()
+    if fingerprint and current and fingerprint != current:
+        version_mismatch = True
+        report["extraction_version_mismatch"] = (
+            f"snapshot={fingerprint} local={current} — derived data will be "
+            "skipped; raw runs still import"
+        )
+    return report, version_mismatch
 
 
-def _import_snapshot(snapshot_dir: Path, db_path: Path) -> dict:
+def _import_snapshot(snapshot_dir: Path, skip_derived: bool = False) -> None:
     import subprocess
 
-    result = subprocess.run(
-        [sys.executable, str(Path(__file__).parent / "sync_latest_data.py"),
-         "--source", str(snapshot_dir)],
-        capture_output=True, text=True,
-    )
+    cmd = [
+        sys.executable,
+        str(Path(__file__).parent / "sync_latest_data.py"),
+        "--source", str(snapshot_dir),
+    ]
+    if skip_derived:
+        cmd.append("--skip-derived")
+    result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise SystemExit(f"import failed:\n{result.stdout}\n{result.stderr}")
     print(result.stdout.strip())
-    return {"output": result.stdout.strip().splitlines()[-3:]}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -154,11 +214,16 @@ def main(argv: list[str] | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="icmi-actions-sync-") as tmp:
         workdir = Path(tmp)
         snapshot_dir, dl_meta = _download_snapshot(token, run["id"], workdir)
-        verification = _verify(snapshot_dir)
+        verification, version_mismatch = _verify(snapshot_dir)
         print(f"verification: {json.dumps(verification, default=str)}")
         if verification["errors"]:
             print("ABORTING — verification errors:", verification["errors"], file=sys.stderr)
             return 2
+        if version_mismatch:
+            print(
+                "extraction version mismatch — importing raw runs only; "
+                "derived data skipped and will be rebuilt locally"
+            )
 
         from icmi.core.paths import canonical_dir
 
@@ -183,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
             src.close()
             print(f"pre-import DB backup: {backup}")
 
-        _import_snapshot(snapshot_dir, db_path)
+        _import_snapshot(snapshot_dir, skip_derived=version_mismatch)
 
         after = _counts(db_path)
         print(f"local DB: {before} -> {after}")
@@ -196,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         # idempotence probe: second import must change nothing
-        _import_snapshot(snapshot_dir, db_path)
+        _import_snapshot(snapshot_dir, skip_derived=version_mismatch)
         final = _counts(db_path)
         if final != after:
             print("FATAL: second import changed the DB — idempotence violated", file=sys.stderr)
@@ -210,6 +275,7 @@ def main(argv: list[str] | None = None) -> int:
             "before": before, "after": after,
             "download": dl_meta,
             "verification": verification,
+            "version_mismatch": version_mismatch,
         }
         print("report:", json.dumps(report, default=str))
     return 0
