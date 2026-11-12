@@ -28,8 +28,13 @@ graceful — other sources unaffected; the manifest records it).
 
 | Step | When | Command |
 |---|---|---|
-| Retrieve + ingest | nightly **04:30 UTC** (2 h after collection; publish completes in ≈5 min) | `python scripts/sync_actions_artifact.py --pending` |
-| Health report | after retrieval (same wrapper) | `python scripts/ops_status.py` |
+| Retrieve + ingest + derived refresh + health | nightly **04:30 UTC** (2 h after collection; publish completes in ≈5 min) | `python scripts/auto_sync.py` |
+| Startup catch-up (missed nights) | at boot / on demand | `python scripts/auto_sync.py` (same command — idempotent, ledger-based) |
+| Health report only | anytime | `python scripts/ops_status.py --problems` |
+
+`auto_sync.py` holds the pipeline lock (overlapping scheduled + manual runs
+serialize), imports ALL pending artifacts chronologically, refreshes
+export/documents/index only when data landed, and journals every outcome.
 
 A missed local window loses nothing: pending detection converges via the
 import ledger, artifacts persist 30 days, imports are idempotent and
@@ -46,8 +51,11 @@ already handled by the collection policy.
 # Cloud collection — h-ops-pipeline.yml: keep cron line commented in the
 # workflow file; activating it is the H-ops-5 owner gate (GitHub-side).
 
-# Local retrieval + ingest, every night 04:30 UTC:
-# 30 4 * * * cd /data/work/projects/Iran-Car-Market-Intelligence && set -a && . ./.env && set +a && .venv/bin/python scripts/sync_actions_artifact.py --pending >> logs/sync.log 2>&1
+# Local retrieval + ingest + derived refresh + health, nightly 04:30 UTC:
+# 30 4 * * * cd /data/work/projects/Iran-Car-Market-Intelligence && set -a && . ./.env && set +a && .venv/bin/python scripts/auto_sync.py >> logs/sync.log 2>&1
+
+# Startup catch-up for missed nights (runs at boot):
+# @reboot cd /data/work/projects/Iran-Car-Market-Intelligence && set -a && . ./.env && set +a && .venv/bin/python scripts/auto_sync.py >> logs/sync.log 2>&1
 
 # Local Bama fallback (ONLY if cloud Bama is disabled again):
 # 30 21 * * * cd /data/work/projects/Iran-Car-Market-Intelligence && .venv/bin/python scripts/pipeline.py collect all --platforms bama --mode scheduled --max-pages 2 --target-listings 60 >> logs/scheduled.log 2>&1
@@ -65,7 +73,7 @@ Type=oneshot
 WorkingDirectory=/data/work/projects/Iran-Car-Market-Intelligence
 # GITHUB_TOKEN must be available to the service (EnvironmentFile=.env)
 EnvironmentFile=/data/work/projects/Iran-Car-Market-Intelligence/.env
-ExecStart=/data/work/projects/Iran-Car-Market-Intelligence/.venv/bin/python scripts/sync_actions_artifact.py --pending
+ExecStart=/data/work/projects/Iran-Car-Market-Intelligence/.venv/bin/python scripts/auto_sync.py
 
 # ~/.config/systemd/user/icmi-sync.timer
 [Unit]
@@ -87,7 +95,7 @@ missed job at next boot — matching the never-lose-an-artifact rule).
 ```powershell
 # Register (owner action):
 schtasks /Create /TN "ICMI artifact sync" /SC DAILY /ST 04:30 /TR ^
-  "cmd /c cd /d C:\path\to\Iran-Car-Market-Intelligence && .venv\Scripts\python.exe scripts\sync_actions_artifact.py --pending >> logs\sync.log 2>&1"
+  "cmd /c cd /d C:\path\to\Iran-Car-Market-Intelligence && .venv\Scripts\python.exe scripts\auto_sync.py >> logs\sync.log 2>&1"
 ```
 
 (Windows path + Task Scheduler untested — marked honest-unknown until

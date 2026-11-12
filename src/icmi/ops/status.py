@@ -26,12 +26,15 @@ KNOWN_PLATFORMS = ("bama", "sheypoor", "hamrah_mechanic", "divar", "karnameh")
 def build_ops_status(store: sqlite3.Connection | None = None) -> dict:
     """Assemble the operational picture. `store` may be an open
     CanonicalStore; otherwise the default DB is opened read-only."""
+    from icmi.ops.health import build_health_report  # local import: no cycle
+
     manifests = _collect_manifests()
     db_status = _database_status(store)
     return {
         "generated_at": _now_iso(),
         "platforms": _platform_status(manifests, db_status),
         "database": db_status,
+        "health": build_health_report(store),
         "search_index": _index_status(),
         "backup": _backup_status(),
         "image_cache": _image_cache_status(),

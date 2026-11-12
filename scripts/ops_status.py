@@ -16,7 +16,7 @@ import argparse
 import json
 import sys
 
-from icmi.ops.health import build_health_report, summarize_health
+from icmi.ops.health import summarize_health
 from icmi.ops.journal import journal_tail
 from icmi.ops.status import build_ops_status
 
@@ -31,7 +31,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     report = build_ops_status()
-    report["health"] = build_health_report()
 
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=1, default=str))
