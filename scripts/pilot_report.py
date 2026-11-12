@@ -168,12 +168,19 @@ def _chain_accounting() -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--days", type=int, default=7)
+    parser.add_argument("--pilot", action="store_true",
+                        help="window = the pilot period only (PILOT_START → "
+                        "now) — pre-pilot experimental data is excluded so "
+                        "the final report represents the seven-day period")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--chain", action="store_true",
                         help="print only the execution-chain accounting")
     args = parser.parse_args(argv)
 
-    since = datetime.now(tz=UTC) - timedelta(days=args.days)
+    if args.pilot:
+        since = PILOT_START
+    else:
+        since = datetime.now(tz=UTC) - timedelta(days=args.days)
     manifests = _manifest_rows(since)
     db = canonical_dir() / "icmi.db"
     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
@@ -181,6 +188,7 @@ def main(argv: list[str] | None = None) -> int:
 
     out: dict = {
         "window_days": args.days,
+        "pilot_window": args.pilot,
         "since": since.isoformat(timespec="seconds"),
         "sources": {},
         "database": {},
@@ -235,7 +243,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(out["chain"], indent=1))
         return 0
 
-    print(f"PILOT REPORT — window: last {args.days} days (since {out['since']})\n")
+    window = "the pilot period (pre-pilot data excluded)" if args.pilot \
+        else f"last {args.days} days"
+    print(f"PILOT REPORT — window: {window} (since {out['since']})\n")
     for platform, s in out["sources"].items():
         fresh = "fresh" if s["fresh_within_cadence"] else "STALE"
         print(f"{platform}:")
