@@ -4,15 +4,17 @@
 > is an explicit owner action. All wrappers call the SAME unified pipeline
 > (`scripts/pipeline.py`) used by manual runs — no separate implementation.
 
-## Proposed production schedule (2026-11-13 — AWAITING OWNER APPROVAL)
+## Production schedule (ACTIVATED 2026-11-13 with owner approval)
 
-**Cloud collection (GitHub Actions, `h-ops-pipeline.yml` cron — commented):**
+**Cloud collection (GitHub Actions `h-ops-pipeline.yml` — three cron triggers,
+per-source cadence enforced by job conditions; minutes differ so each trigger
+fires exactly one run):**
 
 | Source | Cadence | Budget/run | Evidence base |
 |---|---|---|---|
-| Sheypoor | nightly 02:30 UTC | 3 pages, ≤60 target, ≤5 requests | 3 cloud runs OK (60/60/30 rec) |
-| Hamrah Mechanic | Mon/Wed/Fri 02:30 UTC | 3 pages, ≤60 target, ≤5 requests | 3 cloud runs OK (60/24 rec) |
-| Bama | nightly 02:30 UTC | **2 presets × 2 pages**, ≤60 target, ≤8 requests | E1+E3 cloud runs OK; see burst note |
+| Sheypoor | **2× daily** — 02:30 + 14:30 UTC (06:00 + 18:00 Tehran) | 3 pages, ≤60 target, ≤5 requests | rotating feed: every run is a fresh sample (0% overlap @28 min) |
+| Hamrah Mechanic | **Mon/Wed/Fri** 02:34 UTC (06:04 Tehran) | 3 pages, ≤60 target, ≤5 requests | stable inventory feed; 2-3x/week per policy |
+| Bama | **nightly** 02:30 UTC (06:00 Tehran) | **2 presets × 2 pages**, ≤60 target, ≤8 requests | preset rotation via scripts/preset_rotation.py; burst discipline: never same-night retries |
 
 **Bama burst note (evidence-based):** the only cloud Bama failure
 (2026-11-12, 12/12 pages failed) followed **4 collection bursts within 25
@@ -45,13 +47,10 @@ expiry.
 time via the existing pipeline wrapper with `--platforms bama`; rotation
 already handled by the collection policy.
 
-## Linux — cron (templates — UNCOMMENT to enable)
+## Linux — cron (OPTIONAL — local retrieval only; cloud schedule is ACTIVE on GitHub)
 
 ```cron
-# Cloud collection — h-ops-pipeline.yml: keep cron line commented in the
-# workflow file; activating it is the H-ops-5 owner gate (GitHub-side).
-
-# Local retrieval + ingest + derived refresh + health, nightly 04:30 UTC:
+# Local retrieval + ingest + derived refresh + health, nightly 04:30 UTC (07:00 Tehran):
 # 30 4 * * * cd /data/work/projects/Iran-Car-Market-Intelligence && set -a && . ./.env && set +a && .venv/bin/python scripts/auto_sync.py >> logs/sync.log 2>&1
 
 # Startup catch-up for missed nights (runs at boot):

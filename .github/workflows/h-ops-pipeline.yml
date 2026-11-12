@@ -1,14 +1,26 @@
-name: "H-ops: Data Pipeline (dispatch-only, schedules disabled)"
+name: "H-ops: Data Pipeline (scheduled + dispatch)"
+
+# Schedules ACTIVATED 2026-11-13 with owner approval (H-ops-5):
+#   02:30 UTC (06:00 Tehran) daily   → Bama (1 preset-set/night, burst
+#                                      discipline: never same-night retries)
+#                                      + Sheypoor (1st daily draw)
+#   02:34 UTC (06:04 Tehran) M/W/F   → Hamrah Mechanic (stable dealer
+#                                      inventory; 2-3x/week per policy)
+#   14:30 UTC (18:00 Tehran) daily   → Sheypoor (2nd daily draw — rotating
+#                                      feed, every run is a fresh sample)
+# Times chosen from measured collection behavior (see
+# docs/internal/DATA_PIPELINE_AUDIT.md); minutes differ so each schedule
+# fires exactly one workflow run.
 
 on:
   workflow_dispatch:
     inputs:
       presets:
         description: "Comma-separated Bama brand presets for this run"
-        default: "brand-pride,brand-peugeot,brand-shahin,brand-tara"
+        default: "brand-pride,brand-peugeot"
       max_pages:
         description: "Max pages per preset/platform"
-        default: "3"
+        default: "2"
       target_listings:
         description: "Target unique listings per platform/preset"
         default: "60"
@@ -17,11 +29,13 @@ on:
         default: "true"
         type: boolean
       include_bama:
-        description: "Include Bama collection (geo-blocked from runner IPs — see H-ops run analysis; Sheypoor/Hamrah collect fine)"
+        description: "Include Bama collection (dispatch runs only)"
         default: "false"
         type: boolean
-  # schedule:            # DORMANT — H-ops-5 owner gate
-  #   - cron: "30 2 * * *"
+  schedule:
+    - cron: "30 2 * * *"        # 06:00 Tehran — bama + sheypoor
+    - cron: "34 2 * * 1,3,5"    # 06:04 Tehran Mon/Wed/Fri — hamrah
+    - cron: "30 14 * * *"       # 18:00 Tehran — sheypoor (2nd draw)
 
 permissions:
   contents: read
@@ -39,7 +53,9 @@ concurrency:
 
 jobs:
   bama:
-    if: inputs.include_bama == true
+    # dispatch (explicit toggle) OR the 06:00 Tehran daily schedule
+    if: (github.event_name == 'workflow_dispatch' && inputs.include_bama == true)
+      || (github.event_name == 'schedule' && github.event.schedule == '30 2 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -49,14 +65,18 @@ jobs:
       - run: uv sync
       - name: Collect Bama (rotating presets)
         run: |
-          presets=$(echo "${{ inputs.presets }}" | tr ',' ' ')
+          PRESETS="${{ inputs.presets || '' }}"
+          if [ -z "$PRESETS" ]; then
+            PRESETS=$(uv run python scripts/preset_rotation.py)
+          fi
+          echo "presets: $PRESETS"
           overall=0
-          for preset in $presets; do
+          for preset in $PRESETS; do
             echo "::group::bama/$preset"
-            if ! uv run python scripts/collect.py --platform bama --mode ci \
+            if ! uv run python scripts/collect.py --platform bama --mode scheduled \
                 --collection "$preset" \
-                --max-pages "${{ inputs.max_pages }}" \
-                --target-listings "${{ inputs.target_listings }}"; then
+                --max-pages "${{ inputs.max_pages || '2' }}" \
+                --target-listings "${{ inputs.target_listings || '60' }}"; then
               echo "$preset: FAILED" && overall=1
             fi
             echo "::endgroup::"
@@ -74,6 +94,10 @@ jobs:
           retention-days: 1
 
   sheypoor:
+    # dispatch OR either daily schedule (06:00 + 18:00 Tehran)
+    if: github.event_name == 'workflow_dispatch'
+      || github.event.schedule == '30 2 * * *'
+      || github.event.schedule == '30 14 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -83,9 +107,9 @@ jobs:
       - run: uv sync
       - name: Collect Sheypoor
         run: |
-          uv run python scripts/collect.py --platform sheypoor --mode ci \
-            --max-pages "${{ inputs.max_pages }}" \
-            --target-listings "${{ inputs.target_listings }}" \
+          uv run python scripts/collect.py --platform sheypoor --mode scheduled \
+            --max-pages "${{ inputs.max_pages || '3' }}" \
+            --target-listings "${{ inputs.target_listings || '60' }}" \
             || echo "::warning::sheypoor collection failed"
       - name: Upload collection output
         if: always()
@@ -99,6 +123,9 @@ jobs:
           retention-days: 1
 
   hamrah_mechanic:
+    # dispatch OR the Mon/Wed/Fri schedule
+    if: github.event_name == 'workflow_dispatch'
+      || github.event.schedule == '34 2 * * 1,3,5'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -108,9 +135,9 @@ jobs:
       - run: uv sync
       - name: Collect Hamrah Mechanic
         run: |
-          uv run python scripts/collect.py --platform hamrah_mechanic --mode ci \
-            --max-pages "${{ inputs.max_pages }}" \
-            --target-listings "${{ inputs.target_listings }}" \
+          uv run python scripts/collect.py --platform hamrah_mechanic --mode scheduled \
+            --max-pages "${{ inputs.max_pages || '3' }}" \
+            --target-listings "${{ inputs.target_listings || '60' }}" \
             || echo "::warning::hamrah_mechanic collection failed"
       - name: Upload collection output
         if: always()
@@ -146,7 +173,7 @@ jobs:
           mkdir -p data/g4-bundle/metrics data/g4-bundle/logs
           cp data/manifests/*.json data/g4-bundle/metrics/ 2>/dev/null || true
           uv run python scripts/generate_metrics_summary.py
-          if [ "${{ inputs.include_raw }}" = "true" ]; then
+          if [ "${{ inputs.include_raw || true }}" = "true" ]; then
             cp -r data/raw/ data/g4-bundle/raw/ 2>/dev/null || true
           fi
           uv run python scripts/generate_bundle_meta.py
