@@ -2,13 +2,28 @@
 #
 # These are MAXIMUM targets per run, not guaranteed yields. The policy is
 # loaded and validated before any collection executes; a disabled source
-# must never run. Schedules remain disabled at the workflow level (owner
-# gate, H-ops-5).
+# must never run. collect.py clamps requested pages/listings to these
+# ceilings, so no caller can exceed them by accident. Schedules remain
+# disabled at the workflow level (owner gate, H-ops-5).
 #
-# rotation: for sources with presets, the number of presets per run and the
-# deterministic rotation order. "full" preset runs are separate.
+# Budgets below are measurement-derived (2026-11-13, see
+# docs/internal/DATA_PIPELINE_AUDIT.md):
+#   - Sheypoor's unfiltered cursor feed ROTATES (0% overlap between runs
+#     28 min apart) — every run is an independent market sample, so
+#     twice-daily draws add unique coverage without wasting requests.
+#   - Hamrah Mechanic's inventory feed is STABLE (100% overlap at 28 min,
+#     12-23% day-over-day) — frequent runs re-observe the same dealer
+#     inventory; 2-3x/week stays right.
+#   - Bama preset feeds are SEMI-STABLE (~50% overlap at 28 min) — depth
+#     per preset enumerates real inventory; the only observed cloud
+#     failure followed a 4-run/25-min burst, so: one run per night, never
+#     retried same-night.
+#
+# rotation: for sources with presets, the number of presets per run and
+# the deterministic rotation order. Manual dispatches may instead pick
+# presets from the coverage report (scripts/rotation_pick.py).
 
-schema_version: 1
+schema_version: 2
 
 defaults:
   request_delay_seconds: 2.0
@@ -23,10 +38,10 @@ sources:
   bama:
     enabled: true
     cadence: daily
-    max_listings_per_run: 240
-    max_pages_per_preset: 5
-    max_requests_per_run: 30
-    presets_per_run: 4
+    max_listings_per_run: 60
+    max_pages_per_preset: 2
+    max_requests_per_run: 8
+    presets_per_run: 2
     rotation: deterministic   # presets rotate in listed order
     presets:
       - brand-pride
@@ -46,11 +61,11 @@ sources:
 
   sheypoor:
     enabled: true
-    cadence: daily
+    cadence: 2x_daily
     max_listings_per_run: 60
     max_pages_per_run: 3
     max_requests_per_run: 5
-    presets: []               # full feed, cursor pagination
+    presets: []               # full feed, cursor pagination (rotating)
 
   hamrah_mechanic:
     enabled: true

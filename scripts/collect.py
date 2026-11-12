@@ -67,6 +67,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Platform '{args.platform}' is disabled in config.", file=sys.stderr)
         return 2
 
+    # the collection policy is the single source of truth for budgets:
+    # requested values are clamped to the platform's ceilings so no caller
+    # (runner, workflow inputs, manual) can exceed them by accident
+    try:
+        from icmi.pipeline.policy import load_policy
+
+        policy = load_policy().sources[args.platform]
+        if args.max_pages > policy.max_pages_per_run:
+            print(
+                f"policy clamp: max-pages {args.max_pages} -> "
+                f"{policy.max_pages_per_run} ({args.platform} ceiling)"
+            )
+            args.max_pages = policy.max_pages_per_run
+        if args.target_listings > policy.max_listings_per_run:
+            print(
+                f"policy clamp: target-listings {args.target_listings} -> "
+                f"{policy.max_listings_per_run} ({args.platform} ceiling)"
+            )
+            args.target_listings = policy.max_listings_per_run
+    except (KeyError, ValueError, FileNotFoundError):
+        pass  # no policy entry — requested values stand
+
     collector_cls = get_collector(args.platform)
     run_id = build_run_id(args.platform, args.mode)
     try:
@@ -88,6 +110,14 @@ def main(argv: list[str] | None = None) -> int:
     for line in result.manifest.summary_lines():
         print(line)
     print(f"manifest: {result.manifest.outputs.get('manifest_path', '')}")
+
+    # operational journal (best-effort; never affects the run's outcome)
+    try:
+        from icmi.ops.journal import journal_collection_from_manifest
+
+        journal_collection_from_manifest(result.manifest.model_dump(mode="json"))
+    except Exception as exc:  # noqa: BLE001 — journaling must not break runs
+        print(f"journal: skipped ({exc})", file=sys.stderr)
     return 0 if result.manifest.status == "success" else 1
 
 

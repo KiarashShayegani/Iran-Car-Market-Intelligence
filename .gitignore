@@ -31,3 +31,6 @@ docs/internal/
 Thumbs.db
 .idea/
 .vscode/
+
+# Operational logs (journal, scheduled-run output)
+logs/

@@ -295,23 +295,41 @@ def _verify_ingestion(bundle_dir: Path, actions_run_id: int | None = None) -> tu
                 f"manifest platform mismatch for {run_id}: manifest="
                 f"{m.get('platform')!r} bundle-meta={claimed_platform!r}"
             )
-        claimed_info = (meta.get("platforms") or {}).get(claimed_platform or "", {})
+        # per-run direct check: the run's own manifest vs its records.jsonl
         records_file = (
             bundle_dir / "raw" / run_id / (claimed_platform or "") / "records.jsonl"
         )
-        if claimed_platform and claimed_info and records_file.is_file():
-            claimed_n = claimed_info.get("records_extracted")
+        if records_file.is_file():
+            manifest_extracted = m.get("records", {}).get("extracted")
             with records_file.open(encoding="utf-8") as fh:
                 actual_n = sum(1 for line in fh if line.strip())
-            if claimed_n is not None and int(claimed_n) != actual_n:
+            if manifest_extracted is not None and int(manifest_extracted) != actual_n:
                 report["errors"].append(
-                    f"record-count mismatch for {run_id}: bundle-meta claims "
-                    f"{claimed_n}, records.jsonl has {actual_n}"
+                    f"record-count mismatch for {run_id}: manifest claims "
+                    f"{manifest_extracted}, records.jsonl has {actual_n}"
                 )
         if m.get("status") not in ("success", "partial"):
             report["warnings"].append(
                 f"run {run_id}: status={m.get('status')} (ingest only consumes "
                 "records.jsonl that was actually written)"
+            )
+
+    # platform-level check: bundle-meta's records_extracted is the SUM over
+    # the platform's runs — compare against the summed records.jsonl lines
+    for platform, info in (meta.get("platforms") or {}).items():
+        claimed_n = info.get("records_extracted")
+        if claimed_n is None:
+            continue
+        actual_total = 0
+        for run_id in info.get("run_ids", []) or []:
+            rf = bundle_dir / "raw" / run_id / platform / "records.jsonl"
+            if rf.is_file():
+                with rf.open(encoding="utf-8") as fh:
+                    actual_total += sum(1 for line in fh if line.strip())
+        if int(claimed_n) != actual_total:
+            report["errors"].append(
+                f"record-count mismatch for {platform}: bundle-meta claims "
+                f"{claimed_n}, raw records total {actual_total}"
             )
     for ref in meta.get("manifest_refs", []) or []:
         if not (bundle_dir / ref).is_file():
@@ -428,7 +446,7 @@ def _import_snapshot(snapshot_dir: Path, skip_derived: bool = False) -> None:
     print(result.stdout.strip())
 
 
-def _list_pending(token: str, repo: str) -> list[dict]:
+def _list_pending(token: str) -> list[dict]:
     """List recent successful pipeline runs with pending/imported status.
 
     Import status comes from the local ledger (actions-run-<id>.json), which
@@ -436,7 +454,7 @@ def _list_pending(token: str, repo: str) -> list[dict]:
     collection run_ids, so pending detection converges.
     """
     runs = requests.get(
-        f"{GITHUB_API}/repos/{repo}/actions/runs",
+        f"{GITHUB_API}/repos/{REPO}/actions/runs",
         headers=_headers(token),
         params={"status": "success", "per_page": 20}, timeout=30,
     ).json()
@@ -445,7 +463,7 @@ def _list_pending(token: str, repo: str) -> list[dict]:
         if not _is_expected_run(run):
             continue
         arts = requests.get(
-            f"{GITHUB_API}/repos/{repo}/actions/runs/{run['id']}/artifacts",
+            f"{GITHUB_API}/repos/{REPO}/actions/runs/{run['id']}/artifacts",
             headers=_headers(token), timeout=30,
         ).json()
         names = [a["name"] for a in arts.get("artifacts", [])]
@@ -508,6 +526,15 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _journal(event: str, level: str = "info", **fields) -> None:
+    try:
+        from icmi.ops.journal import journal_event
+
+        journal_event("sync", event, level=level, **fields)
+    except Exception:  # noqa: BLE001 — journaling must never break sync
+        pass
+
+
 def _install_ingestion(bundle_dir: Path, actions_run_id: int, dry_run: bool) -> dict:
     """Write-once install of a v2 ingestion bundle, then standard ingest.
 
@@ -548,6 +575,8 @@ def _install_ingestion(bundle_dir: Path, actions_run_id: int, dry_run: bool) -> 
         else:
             installed += 1
     if conflicts:
+        _journal("install_conflict", "critical",
+                 actions_run_id=actions_run_id, conflicts=conflicts[:5])
         raise SystemExit(
             "ABORTING — install conflicts (local file differs from bundle, "
             f"never overwritten): {conflicts[:5]}"
@@ -558,6 +587,9 @@ def _install_ingestion(bundle_dir: Path, actions_run_id: int, dry_run: bool) -> 
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
     print(f"install: {installed} new, {unchanged} identical (write-once)")
+    _journal("install", actions_run_id=actions_run_id,
+             installed_files=installed, unchanged_files=unchanged,
+             dry_run=dry_run)
 
     from icmi.core.paths import canonical_dir
     from icmi.pipeline.runner import PipelineRunner
@@ -587,6 +619,8 @@ def _install_ingestion(bundle_dir: Path, actions_run_id: int, dry_run: bool) -> 
     after = _counts(db_path)
     print(f"local DB: {before} -> {after}")
     if after["listings"] < before["listings"] or after["runs"] < before["runs"]:
+        _journal("shrink_guard_restored", "critical", actions_run_id=actions_run_id,
+                 before=before, after=after)
         print(
             "FATAL: local DB shrank during import — restoring pre-import backup",
             file=sys.stderr,
@@ -602,6 +636,8 @@ def _install_ingestion(bundle_dir: Path, actions_run_id: int, dry_run: bool) -> 
     print(f"idempotence probe: {probe_line} -> "
           f"{'verified (zero changes)' if idempotent else 'VIOLATION'}")
     if not idempotent:
+        _journal("idempotence_violation", "critical", actions_run_id=actions_run_id,
+                 before=before, after=after, final=final)
         raise SystemExit("FATAL: second import changed the DB — idempotence violated")
 
     out = {
@@ -618,6 +654,9 @@ def _install_ingestion(bundle_dir: Path, actions_run_id: int, dry_run: bool) -> 
         {"actions_run_id": actions_run_id, "imported_at": time.time(), **out},
         indent=1,
     ), encoding="utf-8")
+    _journal("import_complete", actions_run_id=actions_run_id,
+             ingest=ingest_line, before=before, after=after,
+             idempotent=idempotent, ledger=str(ledger.name))
     return out
 
 
@@ -630,6 +669,8 @@ def _do_import(token: str, repo: str, run_id: int, dry_run: bool) -> None:
         headers=_headers(token), timeout=30,
     ).json()
     print(f"actions run: {run_id} | conclusion={run.get('conclusion')} | {run['created_at']}")
+    _journal("import_started", actions_run_id=run_id,
+             conclusion=run.get("conclusion"), dry_run=dry_run)
 
     with tempfile.TemporaryDirectory(prefix="icmi-actions-sync-") as tmp:
         workdir = Path(tmp)
@@ -640,6 +681,10 @@ def _do_import(token: str, repo: str, run_id: int, dry_run: bool) -> None:
         if kind == "ingestion":
             verification, _version_mismatch = _verify_ingestion(extract_root, run_id)
             print(f"verification: {json.dumps(verification, default=str)}")
+            _journal("artifact_validated", level="warning" if verification["errors"] else "info",
+                     actions_run_id=run_id, contract=kind,
+                     errors=verification["errors"], warnings=verification["warnings"],
+                     raw_runs=verification.get("raw_runs"))
             if verification["errors"]:
                 print("ABORTING — verification errors:", verification["errors"], file=sys.stderr)
                 return

@@ -268,6 +268,7 @@ def test_failed_platform_bundle_verifies_with_warning(tmp_path: Path) -> None:
     meta = json.loads((bundle / "bundle-meta.json").read_text())
     meta["platforms"]["sheypoor"]["status"] = "failed"
     meta["platforms"]["sheypoor"]["records_extracted"] = 0
+    _write(bundle / "bundle-meta.json", json.dumps(meta))
     # failed platform ships pages but no records.jsonl
     rec = bundle / "raw" / run_id / "sheypoor" / "records.jsonl"
     rec.unlink()
@@ -309,5 +310,55 @@ def test_raw_run_without_manifest_rejected(tmp_path: Path) -> None:
     report, _ = sync_mod._verify_ingestion(bundle, 1000)
     assert any(
         "raw run without manifest: 20261113T000000-sheypoor-ci" in e
+        for e in report["errors"]
+    )
+
+
+def test_multi_run_platform_platform_total_matches(tmp_path: Path) -> None:
+    """A platform with MULTIPLE collection runs in one bundle (e.g. two Bama
+    presets): bundle-meta's records_extracted is the platform SUM; the
+    validator must compare sums, not per-run counts. Regression for the
+    first live validation failure (run 43318754825)."""
+    bundle = _build_bundle(tmp_path, {"sheypoor": 3})
+    run2 = "20261113T000100-sheypoor-ci"
+    recs = "\n".join(
+        json.dumps({"source_listing_id": str(i), "raw_payload": {}})
+        for i in range(2)
+    )
+    _write(bundle / "raw" / run2 / "sheypoor" / "records.jsonl", recs + "\n")
+    _write(bundle / "metrics" / f"{run2}.json",
+           json.dumps(_manifest(run2, "sheypoor", 2, _LOCAL_VERSION)))
+    meta = json.loads((bundle / "bundle-meta.json").read_text())
+    meta["platforms"]["sheypoor"]["run_ids"].append(run2)
+    meta["platforms"]["sheypoor"]["records_extracted"] = 5  # 3 + 2
+    meta["raw_run_ids"].append(run2)
+    meta["manifest_refs"].append(f"metrics/{run2}.json")
+    _write(bundle / "bundle-meta.json", json.dumps(meta))
+    _rehash(bundle)
+    report, _ = sync_mod._verify_ingestion(bundle, 1000)
+    assert report["errors"] == [], report["errors"]
+
+    # a wrong platform total is still caught
+    meta["platforms"]["sheypoor"]["records_extracted"] = 99
+    _write(bundle / "bundle-meta.json", json.dumps(meta))
+    _rehash(bundle)
+    report, _ = sync_mod._verify_ingestion(bundle, 1000)
+    assert any(
+        "record-count mismatch for sheypoor" in e for e in report["errors"]
+    )
+
+
+def test_per_run_manifest_count_mismatch_rejected(tmp_path: Path) -> None:
+    bundle = _build_bundle(tmp_path, {"sheypoor": 3})
+    run_id = "20261113T000000-sheypoor-ci"
+    m = _manifest(run_id, "sheypoor", 7, _LOCAL_VERSION)  # actual lines: 3
+    _write(bundle / "metrics" / f"{run_id}.json", json.dumps(m))
+    meta = json.loads((bundle / "bundle-meta.json").read_text())
+    meta["platforms"]["sheypoor"]["records_extracted"] = 7
+    _write(bundle / "bundle-meta.json", json.dumps(meta))
+    _rehash(bundle)
+    report, _ = sync_mod._verify_ingestion(bundle, 1000)
+    assert any(
+        f"record-count mismatch for {run_id}: manifest claims" in e
         for e in report["errors"]
     )
