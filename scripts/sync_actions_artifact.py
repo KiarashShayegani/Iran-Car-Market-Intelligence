@@ -733,6 +733,27 @@ def _print_status(token: str) -> None:
     print(f"pending cloud runs: {len(pending)}")
     for r in pending[:5]:
         print(f"  {r['id']} ({r['created_at']})")
+    if pending and latest is not None:
+        # retention visibility: artifacts expire; a missed retrieval window
+        # must never silently destroy data
+        arts = requests.get(
+            f"{GITHUB_API}/repos/{REPO}/actions/runs/{pending[0]['id']}/artifacts",
+            headers=_headers(token), timeout=30,
+        ).json()
+        expiries = [
+            (a["name"], a["expires_at"])
+            for a in arts.get("artifacts", [])
+            if a["name"].startswith((INGESTION_PREFIX, SNAPSHOT_PREFIX))
+        ]
+        if expiries:
+            from datetime import UTC, datetime
+            soonest = min(exp for _, exp in expiries)
+            days = (datetime.fromisoformat(soonest.replace("Z", "+00:00"))
+                    - datetime.now(tz=UTC)).days
+            print(f"oldest pending artifact expiry: {soonest} ({days} days left)")
+            if days <= 7:
+                print("  WARNING: pending artifact expires within 7 days — "
+                      "run --pending soon to avoid losing the collection")
     if db.is_file():
         conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
         n_l = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
