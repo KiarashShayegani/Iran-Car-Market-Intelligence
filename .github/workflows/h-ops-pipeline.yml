@@ -16,6 +16,10 @@ on:
         description: "Include raw payloads in artifact"
         default: "true"
         type: boolean
+      include_bama:
+        description: "Include Bama collection (geo-blocked from runner IPs — see H-ops run analysis; Sheypoor/Hamrah collect fine)"
+        default: "false"
+        type: boolean
   # schedule:            # DORMANT — H-ops-5 owner gate
   #   - cron: "30 2 * * *"
 
@@ -28,6 +32,7 @@ concurrency:
 
 jobs:
   bama:
+    if: inputs.include_bama == true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -50,6 +55,16 @@ jobs:
             echo "::endgroup::"
           done
           exit $overall
+      - name: Upload collection output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collect-bama
+          path: |
+            data/raw/
+            data/manifests/
+          if-no-files-found: ignore
+          retention-days: 1
 
   sheypoor:
     runs-on: ubuntu-latest
@@ -65,6 +80,16 @@ jobs:
             --max-pages "${{ inputs.max_pages }}" \
             --target-listings "${{ inputs.target_listings }}" \
             || echo "::warning::sheypoor collection failed"
+      - name: Upload collection output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collect-sheypoor
+          path: |
+            data/raw/
+            data/manifests/
+          if-no-files-found: ignore
+          retention-days: 1
 
   hamrah_mechanic:
     runs-on: ubuntu-latest
@@ -80,6 +105,16 @@ jobs:
             --max-pages "${{ inputs.max_pages }}" \
             --target-listings "${{ inputs.target_listings }}" \
             || echo "::warning::hamrah_mechanic collection failed"
+      - name: Upload collection output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collect-hamrah_mechanic
+          path: |
+            data/raw/
+            data/manifests/
+          if-no-files-found: ignore
+          retention-days: 1
 
   validate-and-publish:
     needs: [bama, sheypoor, hamrah_mechanic]
@@ -95,7 +130,8 @@ jobs:
       - name: Download per-platform artifacts
         uses: actions/download-artifact@v4
         with:
-          path: data/raw/
+          pattern: collect-*
+          path: data/
           merge-multiple: true
 
       - name: Publish ingestion bundle (raw + manifests + metrics + checksums)
