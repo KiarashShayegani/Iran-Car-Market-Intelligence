@@ -1,24 +1,30 @@
 #!/usr/bin/env python3
 """One-command sync from GitHub Actions artifacts into the local data layer.
 
-Finds the latest successful collect-etl Actions run, downloads its snapshot
-artifact, verifies it (zip CRC + traversal, SQLite integrity_check, manifest
-JSON, extraction-version fingerprint), archives the current canonical DB,
-imports raw runs through the standard local ingestion (run-level skip +
-record-level idempotence; the runner DB is never merged), runs an
-idempotence probe (second import must change nothing), and prints a report.
+Supports both artifact contracts:
+
+- v2 ingestion bundle (``icmi-ingestion-<run_id>``): raw/ + metrics/ +
+  SHA256SUMS, no runner DB. Verified (zip CRC + traversal, SHA256SUMS,
+  manifest-per-run, extraction-version fingerprint), installed write-once
+  into data/raw + data/manifests, then ingested through the standard local
+  path (run-level skip + record-level idempotence). A shrink-guard restores
+  the pre-import backup if the authoritative DB ever loses rows, and an
+  idempotence probe re-imports the same bundle expecting zero changes.
+- v1 snapshot (``icmi-snapshot*``): legacy collect-etl runs; verified and
+  imported via sync_latest_data.py as before.
 
 Requires GITHUB_TOKEN (Actions: read) — already in the repo .env.
 
 Examples:
     python scripts/sync_actions_artifact.py --latest
     python scripts/sync_actions_artifact.py --latest --dry-run
-    python scripts/sync_actions_artifact.py --run-id 42926888076
+    python scripts/sync_actions_artifact.py --run-id 43128756244
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -33,7 +39,23 @@ import requests
 
 GITHUB_API = "https://api.github.com"
 REPO = "KiarashShayegani/Iran-Car-Market-Intelligence"
-EXPECTED_WORKFLOW = "collect-etl.yml"
+EXPECTED_WORKFLOWS = ("h-ops-pipeline.yml", "collect-etl.yml")
+INGESTION_PREFIX = "icmi-ingestion-"
+SNAPSHOT_PREFIX = "icmi-snapshot"
+
+
+def _is_expected_run(run: dict) -> bool:
+    return any(run["path"].endswith(w) for w in EXPECTED_WORKFLOWS)
+
+
+def _import_ledger_path(actions_run_id: int) -> Path:
+    from icmi.core.paths import manifests_dir
+
+    return manifests_dir() / f"actions-run-{actions_run_id}.json"
+
+
+def _already_imported(actions_run_id: int) -> bool:
+    return _import_ledger_path(actions_run_id).is_file()
 
 
 def _headers(token: str) -> dict:
@@ -53,11 +75,11 @@ def _find_run(token: str, run_id: int | None) -> dict:
             params={"status": "success", "per_page": 20}, timeout=30,
         ).json()
         run = next(
-            (r for r in runs.get("workflow_runs", []) if r["path"].endswith(EXPECTED_WORKFLOW)),
+            (r for r in runs.get("workflow_runs", []) if _is_expected_run(r)),
             None,
         )
     if not run or run.get("id") is None:
-        raise SystemExit("no successful collect-etl Actions run found")
+        raise SystemExit("no successful pipeline Actions run found")
     if run.get("conclusion") != "success":
         raise SystemExit(f"run {run['id']} conclusion={run.get('conclusion')} — refusing to import")
     return run
@@ -77,17 +99,31 @@ def _validate_members(zf: zipfile.ZipFile, root: Path) -> None:
             raise SystemExit(f"zip member escapes root: {name}")
 
 
-def _download_snapshot(token: str, run_id: int, workdir: Path) -> tuple[Path, dict]:
+def _pick_artifact(artifacts: dict) -> dict:
+    """Prefer the v2 ingestion bundle; fall back to the legacy v1 snapshot."""
+    arts = artifacts.get("artifacts", [])
+    for a in arts:
+        if a["name"].startswith(INGESTION_PREFIX):
+            return a
+    for a in arts:
+        if a["name"].startswith(SNAPSHOT_PREFIX):
+            return a
+    raise SystemExit(
+        "no icmi-ingestion (v2) or icmi-snapshot (v1) artifact on this run"
+    )
+
+
+def _download_artifact(token: str, run_id: int, workdir: Path) -> tuple[Path, str, dict]:
+    """Download this run's data artifact. Returns (extract_root, kind, meta).
+
+    kind is 'ingestion' (v2, flat zip) or 'snapshot' (v1, outer zip holding
+    icmi_snapshot_*.zip).
+    """
     arts = requests.get(
         f"{GITHUB_API}/repos/{REPO}/actions/runs/{run_id}/artifacts",
         headers=_headers(token), timeout=30,
     ).json()
-    art = next(
-        (a for a in arts.get("artifacts", []) if a["name"].startswith("icmi-snapshot")),
-        None,
-    )
-    if art is None:
-        raise SystemExit("no icmi-snapshot artifact on this run")
+    art = _pick_artifact(arts)
     t0 = time.time()
     r = requests.get(art["archive_download_url"], headers=_headers(token), timeout=300)
     duration = round(time.time() - t0, 1)
@@ -98,6 +134,14 @@ def _download_snapshot(token: str, run_id: int, workdir: Path) -> tuple[Path, di
             raise SystemExit("outer artifact zip is corrupt")
         _validate_members(zf, workdir)
         zf.extractall(workdir)
+
+    meta = {
+        "artifact_name": art["name"],
+        "compressed_kb": len(r.content) // 1024,
+        "download_seconds": duration,
+    }
+    if art["name"].startswith(INGESTION_PREFIX):
+        return _bundle_root(workdir), "ingestion", meta
     inner = next(workdir.rglob("icmi_snapshot_*.zip"))
     snapshot_dir = workdir / inner.stem
     with zipfile.ZipFile(inner) as zf:
@@ -105,11 +149,101 @@ def _download_snapshot(token: str, run_id: int, workdir: Path) -> tuple[Path, di
             raise SystemExit("inner snapshot zip is corrupt")
         _validate_members(zf, snapshot_dir)
         zf.extractall(snapshot_dir)
-    print(
-        f"artifact downloaded: {art['name']} | {len(r.content)//1024} KB compressed | "
-        f"{duration}s | extraction verified"
-    )
-    return snapshot_dir, {"compressed_kb": len(r.content) // 1024, "download_seconds": duration}
+    meta["inner_zip"] = inner.name
+    return snapshot_dir, "snapshot", meta
+
+
+def _bundle_root(workdir: Path) -> Path:
+    """The v2 bundle extracts flat (SHA256SUMS at top level) or under one dir."""
+    if (workdir / "SHA256SUMS").is_file():
+        return workdir
+    candidates = [
+        d for d in workdir.iterdir() if d.is_dir() and (d / "SHA256SUMS").is_file()
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    raise SystemExit("could not locate ingestion bundle root (SHA256SUMS missing)")
+
+
+def _verify_ingestion(bundle_dir: Path) -> tuple[dict, bool]:
+    """Verify the v2 ingestion bundle. Returns (report, version_mismatch).
+
+    Hard errors: missing/corrupt SHA256SUMS, any checksum mismatch, a raw run
+    dir without its manifest, corrupt manifest JSON. A missing DB is NOT an
+    error — the v2 contract excludes the runner DB by design.
+    """
+    report: dict = {"errors": [], "warnings": [], "contract": "v2-ingestion"}
+    version_mismatch = False
+
+    sums = bundle_dir / "SHA256SUMS"
+    if not sums.is_file():
+        report["errors"].append("missing SHA256SUMS")
+        return report, version_mismatch
+
+    listed: dict[str, str] = {}
+    for line in sums.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        digest, sep, path = line.partition("  ")
+        if not sep or len(digest) != 64:
+            report["errors"].append(f"malformed SHA256SUMS line: {line!r}")
+            continue
+        listed[path.removeprefix("./")] = digest.lower()
+
+    mismatches = []
+    for rel, expected in sorted(listed.items()):
+        f = bundle_dir / rel
+        if not f.is_file():
+            mismatches.append(f"{rel}: listed but missing")
+            continue
+        if hashlib.sha256(f.read_bytes()).hexdigest() != expected:
+            mismatches.append(f"{rel}: checksum mismatch")
+    if mismatches:
+        report["errors"].extend(mismatches[:10])
+
+    actual_files = {
+        str(p.relative_to(bundle_dir))
+        for p in bundle_dir.rglob("*") if p.is_file()
+    }
+    unlisted = sorted(actual_files - set(listed) - {"SHA256SUMS", "artifact.zip"})
+    if unlisted:
+        report["warnings"].append(f"files not in SHA256SUMS: {unlisted[:10]}")
+
+    raw_root = bundle_dir / "raw"
+    raw_runs = sorted(d.name for d in raw_root.iterdir() if d.is_dir()) if raw_root.is_dir() else []
+    if not raw_runs:
+        report["warnings"].append(
+            "no raw runs in bundle — every platform failed or was skipped"
+        )
+    fingerprint = None
+    for run_id in raw_runs:
+        mpath = bundle_dir / "metrics" / f"{run_id}.json"
+        if not mpath.is_file():
+            report["errors"].append(f"raw run without manifest: {run_id}")
+            continue
+        try:
+            m = json.loads(mpath.read_text(encoding="utf-8"))
+        except ValueError:
+            report["errors"].append(f"corrupt manifest: {run_id}")
+            continue
+        fingerprint = fingerprint or m.get("extraction_version")
+        if m.get("status") not in ("success", "partial"):
+            report["warnings"].append(
+                f"run {run_id}: status={m.get('status')} (ingest only consumes "
+                "records.jsonl that was actually written)"
+            )
+    report["raw_runs"] = raw_runs
+    report["extraction_version"] = fingerprint
+
+    current = _current_extraction_version()
+    if fingerprint and current and fingerprint != current:
+        version_mismatch = True
+        report["extraction_version_mismatch"] = (
+            f"bundle={fingerprint} local={current} — raw runs still import; "
+            "refresh derived views locally after ingest"
+        )
+    return report, version_mismatch
 
 
 def _extraction_fingerprint(snapshot_dir: Path) -> str | None:
@@ -195,7 +329,12 @@ def _import_snapshot(snapshot_dir: Path, skip_derived: bool = False) -> None:
 
 
 def _list_pending(token: str, repo: str) -> list[dict]:
-    """List recent successful collect-etl runs with pending/imported status."""
+    """List recent successful pipeline runs with pending/imported status.
+
+    Import status comes from the local ledger (actions-run-<id>.json), which
+    the import path writes on success — cloud run ids never collide with
+    collection run_ids, so pending detection converges.
+    """
     runs = requests.get(
         f"{GITHUB_API}/repos/{repo}/actions/runs",
         headers=_headers(token),
@@ -203,17 +342,21 @@ def _list_pending(token: str, repo: str) -> list[dict]:
     ).json()
     out = []
     for run in runs.get("workflow_runs", []):
-        if not run["path"].endswith(EXPECTED_WORKFLOW):
+        if not _is_expected_run(run):
             continue
         arts = requests.get(
             f"{GITHUB_API}/repos/{repo}/actions/runs/{run['id']}/artifacts",
             headers=_headers(token), timeout=30,
         ).json()
-        has_snapshot = any(a["name"].startswith("icmi-snapshot") for a in arts.get("artifacts", []))
+        names = [a["name"] for a in arts.get("artifacts", [])]
         out.append({
             "run_id": run["id"],
             "created_at": run["created_at"],
-            "has_snapshot": has_snapshot,
+            "has_artifact": any(
+                n.startswith(INGESTION_PREFIX) or n.startswith(SNAPSHOT_PREFIX)
+                for n in names
+            ),
+            "imported": _already_imported(run["id"]),
         })
     return out
 
@@ -249,7 +392,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.pending:
         # chronological import of all pending runs
         pending = _list_pending(token)
-        not_yet = [r for r in pending if r["has_snapshot"]]
+        not_yet = [r for r in pending if r["has_artifact"] and not r["imported"]]
         print(f"pending runs with artifacts: {len(not_yet)}")
         for run_info in sorted(not_yet, key=lambda r: r["created_at"]):
             print(f"\n--- importing run {run_info['run_id']} ({run_info['created_at']})")
@@ -265,7 +408,123 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _install_ingestion(bundle_dir: Path, actions_run_id: int, dry_run: bool) -> dict:
+    """Write-once install of a v2 ingestion bundle, then standard ingest.
+
+    Returns a report dict. Never overwrites existing local files: identical
+    files are skipped, differing ones abort the import (local raw data is
+    authoritative — a conflict means corruption or a hash collision).
+    """
+    from icmi.core.paths import manifests_dir, raw_dir
+
+    raw_root = raw_dir()
+    man_root = manifests_dir()
+
+    pairs: list[tuple[Path, Path]] = []
+    bundle_raw = bundle_dir / "raw"
+    if bundle_raw.is_dir():
+        for run_dir in sorted(bundle_raw.iterdir()):
+            if not run_dir.is_dir():
+                continue
+            for f in sorted(run_dir.rglob("*")):
+                if f.is_file():
+                    pairs.append((f, raw_root / f.relative_to(bundle_raw)))
+    bundle_metrics = bundle_dir / "metrics"
+    if bundle_metrics.is_dir():
+        for f in sorted(bundle_metrics.glob("*.json")):
+            if f.name == "summary.json":
+                continue
+            if (bundle_raw / f.stem).is_dir():
+                pairs.append((f, man_root / f.name))
+
+    installed = unchanged = 0
+    conflicts: list[str] = []
+    for src, dst in pairs:
+        if dst.is_file():
+            if dst.read_bytes() == src.read_bytes():
+                unchanged += 1
+            else:
+                conflicts.append(str(dst))
+        else:
+            installed += 1
+    if conflicts:
+        raise SystemExit(
+            "ABORTING — install conflicts (local file differs from bundle, "
+            f"never overwritten): {conflicts[:5]}"
+        )
+    if not dry_run:
+        for src, dst in pairs:
+            if not dst.is_file():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+    print(f"install: {installed} new, {unchanged} identical (write-once)")
+
+    from icmi.core.paths import canonical_dir
+    from icmi.pipeline.runner import PipelineRunner
+
+    db_path = canonical_dir() / "icmi.db"
+    before = _counts(db_path)
+
+    if dry_run:
+        print("dry-run: no changes made")
+        return {"installed_files": installed, "unchanged_files": unchanged,
+                "before": before, "dry_run": True}
+
+    backup = db_path.parent / f"pre-import-{actions_run_id}-{int(time.time())}.db"
+    if db_path.is_file():
+        src = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        dst = sqlite3.connect(backup)
+        src.backup(dst)
+        dst.close()
+        src.close()
+        print(f"pre-import DB backup: {backup}")
+
+    runner = PipelineRunner(mode="manual")
+    report = runner.run(["ingest"])
+    ingest_line = next((s.detail for s in report.stages if s.name == "ingest"), "")
+    print(f"ingest: [{report.ok}] {ingest_line}")
+
+    after = _counts(db_path)
+    print(f"local DB: {before} -> {after}")
+    if after["listings"] < before["listings"] or after["runs"] < before["runs"]:
+        print(
+            "FATAL: local DB shrank during import — restoring pre-import backup",
+            file=sys.stderr,
+        )
+        shutil.copy2(backup, db_path)
+        return {"shrink_guard": "restored-backup", "before": before, "after": after}
+
+    # idempotence probe: re-run the same ingest — run-level skip must make it a no-op
+    probe = runner.run(["ingest"])
+    probe_line = next((s.detail for s in probe.stages if s.name == "ingest"), "")
+    final = _counts(db_path)
+    idempotent = final == after
+    print(f"idempotence probe: {probe_line} -> "
+          f"{'verified (zero changes)' if idempotent else 'VIOLATION'}")
+    if not idempotent:
+        raise SystemExit("FATAL: second import changed the DB — idempotence violated")
+
+    out = {
+        "before": before,
+        "after": after,
+        "installed_files": installed,
+        "unchanged_files": unchanged,
+        "ingest": ingest_line,
+        "idempotent": idempotent,
+    }
+    ledger = _import_ledger_path(actions_run_id)
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    ledger.write_text(json.dumps(
+        {"actions_run_id": actions_run_id, "imported_at": time.time(), **out},
+        indent=1,
+    ), encoding="utf-8")
+    return out
+
+
 def _do_import(token: str, repo: str, run_id: int, dry_run: bool) -> None:
+    if _already_imported(run_id):
+        print(f"actions run {run_id}: already imported (ledger) — nothing to do")
+        return
     run = requests.get(
         f"{GITHUB_API}/repos/{repo}/actions/runs/{run_id}",
         headers=_headers(token), timeout=30,
@@ -274,7 +533,27 @@ def _do_import(token: str, repo: str, run_id: int, dry_run: bool) -> None:
 
     with tempfile.TemporaryDirectory(prefix="icmi-actions-sync-") as tmp:
         workdir = Path(tmp)
-        snapshot_dir, dl_meta = _download_snapshot(token, run_id, workdir)
+        extract_root, kind, dl_meta = _download_artifact(token, run_id, workdir)
+        print(f"artifact: {dl_meta['artifact_name']} | {dl_meta['compressed_kb']} KB "
+              f"| {dl_meta['download_seconds']}s | contract={kind}")
+
+        if kind == "ingestion":
+            verification, _version_mismatch = _verify_ingestion(extract_root)
+            print(f"verification: {json.dumps(verification, default=str)}")
+            if verification["errors"]:
+                print("ABORTING — verification errors:", verification["errors"], file=sys.stderr)
+                return
+            report = _install_ingestion(extract_root, run_id, dry_run)
+            report.update({
+                "run_id": run_id,
+                "download": dl_meta,
+                "verification": verification,
+            })
+            print("report:", json.dumps(report, default=str))
+            return
+
+        # legacy v1 snapshot contract
+        snapshot_dir = extract_root
         verification, version_mismatch = _verify(snapshot_dir)
         print(f"verification: {json.dumps(verification, default=str)}")
         if verification["errors"]:
@@ -346,16 +625,11 @@ def _print_status(token: str) -> None:
         headers=_headers(token),
         params={"status": "success", "per_page": 10}, timeout=30,
     ).json()
-    cloud_runs = [
-        r for r in runs.get("workflow_runs", [])
-        if r["path"].endswith(EXPECTED_WORKFLOW)
-    ]
-    local_runs = _already_ingested_run_ids_safe(db)
-    pending = [r for r in cloud_runs if str(r["id"]) not in local_runs]
+    cloud_runs = [r for r in runs.get("workflow_runs", []) if _is_expected_run(r)]
+    pending = [r for r in cloud_runs if not _already_imported(r["id"])]
     latest = cloud_runs[0] if cloud_runs else None
     print(f"latest cloud run: {latest['id'] if latest else '—'} "
           f"({latest['created_at'] if latest else '—'})")
-    print(f"latest local import: {max(local_runs) if local_runs else '—'}")
     print(f"pending cloud runs: {len(pending)}")
     for r in pending[:5]:
         print(f"  {r['id']} ({r['created_at']})")
@@ -367,16 +641,6 @@ def _print_status(token: str) -> None:
         conn.close()
 
 
-def _already_ingested_run_ids_safe(db: Path) -> list[str]:
-    if not db.is_file():
-        return []
-    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    try:
-        return [r[0] for r in conn.execute("SELECT run_id FROM runs")]
-    finally:
-        conn.close()
-
-
 def _list_runs(token: str) -> None:
     runs = requests.get(
         f"{GITHUB_API}/repos/{REPO}/actions/runs",
@@ -384,7 +648,10 @@ def _list_runs(token: str) -> None:
         params={"status": "success", "per_page": 10}, timeout=30,
     ).json()
     for r in runs.get("workflow_runs", []):
-        print(f"  {r['id']}  {r['created_at']}  {r['path']}")
+        if not _is_expected_run(r):
+            continue
+        mark = "imported" if _already_imported(r["id"]) else "pending "
+        print(f"  [{mark}]  {r['id']}  {r['created_at']}  {r['path']}")
 
 
 def _counts(db_path: Path) -> dict:
