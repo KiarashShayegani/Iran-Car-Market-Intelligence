@@ -142,6 +142,7 @@ jobs:
           if [ "${{ inputs.include_raw }}" = "true" ]; then
             cp -r data/raw/ data/g4-bundle/raw/ 2>/dev/null || true
           fi
+          uv run python scripts/generate_bundle_meta.py
           cd data/g4-bundle && find . -type f ! -name SHA256SUMS -exec sha256sum {} \; > SHA256SUMS
 
       - name: Upload ingestion bundle

@@ -126,6 +126,11 @@ def _download_artifact(token: str, run_id: int, workdir: Path) -> tuple[Path, st
     art = _pick_artifact(arts)
     t0 = time.time()
     r = requests.get(art["archive_download_url"], headers=_headers(token), timeout=300)
+    if r.status_code != 200:
+        raise SystemExit(
+            f"artifact download failed: HTTP {r.status_code} for {art['name']} "
+            f"(run {run_id}) — check token scope and artifact expiry"
+        )
     duration = round(time.time() - t0, 1)
     artifact_zip = workdir / "artifact.zip"
     artifact_zip.write_bytes(r.content)
@@ -165,11 +170,13 @@ def _bundle_root(workdir: Path) -> Path:
     raise SystemExit("could not locate ingestion bundle root (SHA256SUMS missing)")
 
 
-def _verify_ingestion(bundle_dir: Path) -> tuple[dict, bool]:
+def _verify_ingestion(bundle_dir: Path, actions_run_id: int | None = None) -> tuple[dict, bool]:
     """Verify the v2 ingestion bundle. Returns (report, version_mismatch).
 
     Hard errors: missing/corrupt SHA256SUMS, any checksum mismatch, a raw run
-    dir without its manifest, corrupt manifest JSON. A missing DB is NOT an
+    dir without its manifest, corrupt manifest/bundle-meta JSON, bundle-meta
+    contract violations (missing meta, wrong contract/version, platform/raw
+    mismatch, record-count mismatch, run-id mismatch). A missing DB is NOT an
     error — the v2 contract excludes the runner DB by design.
     """
     report: dict = {"errors": [], "warnings": [], "contract": "v2-ingestion"}
@@ -210,12 +217,66 @@ def _verify_ingestion(bundle_dir: Path) -> tuple[dict, bool]:
     if unlisted:
         report["warnings"].append(f"files not in SHA256SUMS: {unlisted[:10]}")
 
+    # --- bundle-meta: identity + cross-checks against actual contents -----
+    meta_path = bundle_dir / "bundle-meta.json"
+    if not meta_path.is_file():
+        report["errors"].append(
+            "missing bundle-meta.json — artifact predates finalized contract "
+            "v2; re-publish from the updated workflow"
+        )
+        return report, version_mismatch
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        report["errors"].append(f"malformed bundle-meta.json: {exc}")
+        return report, version_mismatch
+
+    if meta.get("contract") != "icmi-ingestion-bundle" or meta.get("contract_version") != 2:
+        report["errors"].append(
+            "bundle-meta contract mismatch: expected "
+            f"icmi-ingestion-bundle v2, got {meta.get('contract')!r} "
+            f"v{meta.get('contract_version')!r}"
+        )
+    if (
+        actions_run_id is not None
+        and meta.get("actions_run_id") is not None
+        and int(meta["actions_run_id"]) != int(actions_run_id)
+    ):
+        report["errors"].append(
+            f"bundle-meta actions_run_id {meta['actions_run_id']} != downloaded "
+            f"run id {actions_run_id}"
+        )
+
     raw_root = bundle_dir / "raw"
     raw_runs = sorted(d.name for d in raw_root.iterdir() if d.is_dir()) if raw_root.is_dir() else []
     if not raw_runs:
         report["warnings"].append(
             "no raw runs in bundle — every platform failed or was skipped"
         )
+
+    # every raw run dir must be claimed by exactly one platform in meta
+    claimed: dict[str, str] = {}
+    for platform, info in (meta.get("platforms") or {}).items():
+        for run_id in info.get("run_ids", []) or []:
+            if run_id in claimed:
+                report["errors"].append(
+                    f"bundle-meta: run {run_id} claimed by both "
+                    f"{claimed[run_id]} and {platform}"
+                )
+            claimed[run_id] = platform
+    for run_id in raw_runs:
+        if run_id not in claimed:
+            report["errors"].append(
+                f"bundle-meta platform mismatch: raw run {run_id} present but "
+                "not claimed by any platform"
+            )
+    for run_id, platform in claimed.items():
+        if run_id not in raw_runs:
+            report["errors"].append(
+                f"bundle-meta platform mismatch: {platform} claims run "
+                f"{run_id} but raw/{run_id}/ is missing"
+            )
+
     fingerprint = None
     for run_id in raw_runs:
         mpath = bundle_dir / "metrics" / f"{run_id}.json"
@@ -228,13 +289,52 @@ def _verify_ingestion(bundle_dir: Path) -> tuple[dict, bool]:
             report["errors"].append(f"corrupt manifest: {run_id}")
             continue
         fingerprint = fingerprint or m.get("extraction_version")
+        claimed_platform = claimed.get(run_id)
+        if claimed_platform and m.get("platform") != claimed_platform:
+            report["errors"].append(
+                f"manifest platform mismatch for {run_id}: manifest="
+                f"{m.get('platform')!r} bundle-meta={claimed_platform!r}"
+            )
+        claimed_info = (meta.get("platforms") or {}).get(claimed_platform or "", {})
+        records_file = (
+            bundle_dir / "raw" / run_id / (claimed_platform or "") / "records.jsonl"
+        )
+        if claimed_platform and claimed_info and records_file.is_file():
+            claimed_n = claimed_info.get("records_extracted")
+            with records_file.open(encoding="utf-8") as fh:
+                actual_n = sum(1 for line in fh if line.strip())
+            if claimed_n is not None and int(claimed_n) != actual_n:
+                report["errors"].append(
+                    f"record-count mismatch for {run_id}: bundle-meta claims "
+                    f"{claimed_n}, records.jsonl has {actual_n}"
+                )
         if m.get("status") not in ("success", "partial"):
             report["warnings"].append(
                 f"run {run_id}: status={m.get('status')} (ingest only consumes "
                 "records.jsonl that was actually written)"
             )
+    for ref in meta.get("manifest_refs", []) or []:
+        if not (bundle_dir / ref).is_file():
+            report["errors"].append(f"bundle-meta manifest_ref missing: {ref}")
+
+    meta_extraction = meta.get("extraction_version")
+    if (
+        meta_extraction
+        and fingerprint
+        and meta_extraction != fingerprint
+    ):
+        report["errors"].append(
+            f"bundle-meta extraction_version {meta_extraction} != manifest "
+            f"fingerprint {fingerprint}"
+        )
+
     report["raw_runs"] = raw_runs
     report["extraction_version"] = fingerprint
+    report["bundle_meta"] = {
+        k: meta.get(k)
+        for k in ("contract", "contract_version", "actions_run_id",
+                  "actions_run_attempt", "created_at")
+    }
 
     current = _current_extraction_version()
     if fingerprint and current and fingerprint != current:
@@ -538,7 +638,7 @@ def _do_import(token: str, repo: str, run_id: int, dry_run: bool) -> None:
               f"| {dl_meta['download_seconds']}s | contract={kind}")
 
         if kind == "ingestion":
-            verification, _version_mismatch = _verify_ingestion(extract_root)
+            verification, _version_mismatch = _verify_ingestion(extract_root, run_id)
             print(f"verification: {json.dumps(verification, default=str)}")
             if verification["errors"]:
                 print("ABORTING — verification errors:", verification["errors"], file=sys.stderr)
