@@ -26,6 +26,13 @@ on:
 permissions:
   contents: read
 
+# CI-only: the repo's local default index (Tsinghua mirror) is optimal for
+# the Iran-based dev machine but intermittently 403s GitHub-hosted runners
+# (observed 2026-11-13, torch download). PyPI default in CI; the explicit
+# pytorch-cpu index is unaffected. Local behavior unchanged.
+env:
+  UV_DEFAULT_INDEX: https://pypi.org/simple
+
 concurrency:
   group: h-ops-pipeline
   cancel-in-progress: false
