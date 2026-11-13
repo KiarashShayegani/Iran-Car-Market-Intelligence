@@ -104,19 +104,19 @@ jobs:
 
       - name: Publish ingestion bundle
         run: |
-          mkdir -p data/foundation-bundle/metrics
-          cp data/manifests/*.json data/foundation-bundle/metrics/ 2>/dev/null || true
+          mkdir -p data/g4-bundle/metrics
+          cp data/manifests/*.json data/g4-bundle/metrics/ 2>/dev/null || true
           uv run python scripts/generate_metrics_summary.py
-          cp -r data/raw/ data/foundation-bundle/raw/ 2>/dev/null || true
+          cp -r data/raw/ data/g4-bundle/raw/ 2>/dev/null || true
           uv run python scripts/generate_bundle_meta.py
-          cd data/foundation-bundle && find . -type f ! -name SHA256SUMS -exec sha256sum {} \; > SHA256SUMS
+          cd data/g4-bundle && find . -type f ! -name SHA256SUMS -exec sha256sum {} \; > SHA256SUMS
 
       - name: Upload ingestion bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: icmi-ingestion-${{ github.run_id }}
-          path: data/foundation-bundle/
+          path: data/g4-bundle/
           retention-days: 90
 
       - name: Summary
