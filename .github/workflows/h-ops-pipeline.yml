@@ -71,7 +71,7 @@ jobs:
           fi
           echo "presets: $PRESETS"
           overall=0
-          for preset in $PRESETS; do
+          for preset in $(echo "$PRESETS" | tr ',' ' '); do
             echo "::group::bama/$preset"
             if ! uv run python scripts/collect.py --platform bama --mode scheduled \
                 --collection "$preset" \

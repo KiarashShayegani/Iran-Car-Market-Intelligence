@@ -102,3 +102,12 @@ def test_workflow_collect_invocations_match_collect_cli():
                     f"workflow job '{job_name}' passes --mode {m} but "
                     f"collect.py only accepts {modes}"
                 )
+
+    # comma-separated presets must be split before iteration (regression
+    # 2026-11-13: the whole comma-joined string was passed as ONE preset)
+    bama_script = "\n".join(
+        s.get("run", "") for s in wf["jobs"]["bama"]["steps"]
+    )
+    assert "tr ','" in bama_script, (
+        "bama preset loop must split comma-separated presets"
+    )
