@@ -64,3 +64,41 @@ def test_policy_file_has_expected_sources():
         "bama", "sheypoor", "hamrah_mechanic", "divar", "karnameh",
         "test_gated",
     }
+
+
+def test_workflow_collect_invocations_match_collect_cli():
+    """Regression (2026-11-13): the scheduled workflow called collect.py with
+    --mode scheduled, which argparse rejected — every scheduled collection
+    silently produced nothing. The workflow's collect invocations must only
+    use argument values collect.py actually accepts."""
+    import ast
+    import re
+    from pathlib import Path
+
+    import yaml
+
+    root = Path(__file__).resolve().parents[1]
+    wf = yaml.safe_load((root / ".github/workflows/h-ops-pipeline.yml").read_text())
+
+    # collect.py's accepted --mode choices, read from its AST
+    cli_src = (root / "scripts/collect.py").read_text()
+    cli_ast = ast.parse(cli_src)
+    modes = None
+    for node in ast.walk(cli_ast):
+        if isinstance(node, ast.Call):
+            kw = {k.arg: k for k in node.keywords}
+            if "choices" in kw:
+                try:
+                    modes = ast.literal_eval(kw["choices"].value)
+                except ValueError:
+                    continue
+    assert modes, "could not find --mode choices in collect.py"
+
+    for job_name, job in wf["jobs"].items():
+        for step in job.get("steps", []):
+            script = step.get("run", "")
+            for m in re.findall(r"--mode\s+(\w+)", script):
+                assert m in modes, (
+                    f"workflow job '{job_name}' passes --mode {m} but "
+                    f"collect.py only accepts {modes}"
+                )

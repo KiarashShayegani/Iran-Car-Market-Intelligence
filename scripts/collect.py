@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--platform", required=True, help="config key, e.g. bama")
     parser.add_argument(
-        "--mode", choices=("local", "ci"), default="local",
+        "--mode", choices=("local", "ci", "scheduled"), default="local",
         help="execution mode recorded in the manifest (default: local)",
     )
     parser.add_argument(
