@@ -48,6 +48,10 @@ def main(argv: list[str] | None = None) -> int:
         help="stop after this many unique listings (default: 36)",
     )
     parser.add_argument(
+        "--page-start", type=int, default=0,
+        help="first page index (foundation sweeps partition deep ranges)",
+    )
+    parser.add_argument(
         "--collection", default="full",
         help="named collection preset from config (default: full)",
     )
@@ -104,7 +108,8 @@ def main(argv: list[str] | None = None) -> int:
         collection=args.collection,
     )
     result = collector.collect(
-        target_listings=args.target_listings, max_pages=args.max_pages
+        target_listings=args.target_listings, max_pages=args.max_pages,
+        page_start=args.page_start,
     )
 
     for line in result.manifest.summary_lines():

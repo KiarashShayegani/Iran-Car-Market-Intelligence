@@ -174,10 +174,17 @@ class BaseCollector(ABC):
 
     # --- main loop -----------------------------------------------------------
 
-    def collect(self, target_listings: int, max_pages: int) -> CollectorResult:
+    def collect(
+        self,
+        target_listings: int,
+        max_pages: int,
+        page_start: int = 0,
+    ) -> CollectorResult:
         """Collect up to ``target_listings`` unique listings over at most
-        ``max_pages`` pages. Stops early on repeated empty pages or hard
-        failures; never silently truncates without recording it."""
+        ``max_pages`` pages, starting at ``page_start`` (foundation sweeps
+        partition deep page ranges across runs). Stops early on repeated
+        empty pages or hard failures; never silently truncates without
+        recording it."""
         started_at = utc_now()
         records: list[CanonicalRecord] = []
         seen_ids: set[str] = set()
@@ -185,7 +192,7 @@ class BaseCollector(ABC):
         duplicates = 0
         consecutive_empty = 0
 
-        for page_index in range(max_pages):
+        for page_index in range(page_start, page_start + max_pages):
             try:
                 payload = self._fetch_json(self.page_params(page_index))
                 self.writer.write_page(page_index, payload)

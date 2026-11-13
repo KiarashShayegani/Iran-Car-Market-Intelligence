@@ -1,0 +1,127 @@
+name: "Foundation Sweep (deep corpus building)"
+
+# Scenario C: aggressive one-time corpus foundation on GitHub Actions.
+# Dispatch-driven (owner or agent fires it); each run walks ONE deep slice
+# and publishes an ingestion bundle — the farmer-eggs loop banks it locally
+# with auto_sync.py. All collection uses the standard collector + policy
+# clamp; pacing/retry/403-stop are built into BaseCollector.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sheypoor_pages:
+        description: "Sheypoor sweep depth in pages (0 = skip)"
+        default: "100"
+      bama_collection:
+        description: "Bama collection name for a deep walk (band-0-300m, brand-kia, web-car, ...; empty = skip)"
+        default: ""
+      bama_pages:
+        description: "Bama per-brand walk depth in pages"
+        default: "100"
+      bama_page_start:
+        description: "Bama walk first page index (partition deep ranges across runs)"
+        default: "1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-sweep
+  cancel-in-progress: false
+
+jobs:
+  sheypoor-sweep:
+    if: inputs.sheypoor_pages != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync
+      - name: Deep Sheypoor sweep
+        run: |
+          uv run python scripts/collect.py --platform sheypoor --mode scheduled \
+            --max-pages "${{ inputs.sheypoor_pages }}" \
+            --target-listings 25000 \
+            || echo "::warning::sheypoor sweep failed"
+      - name: Upload collection output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collect-sheypoor
+          path: |
+            data/raw/
+            data/manifests/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  bama-collection-walk:
+    if: inputs.bama_collection != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync
+      - name: Deep collection walk
+        run: |
+          uv run python scripts/collect.py --platform bama --mode scheduled \
+            --collection "${{ inputs.bama_collection }}" \
+            --max-pages "${{ inputs.bama_pages }}" \
+            --page-start "${{ inputs.bama_page_start }}" \
+            --target-listings 25000 \
+            || echo "::warning::bama walk failed"
+      - name: Upload collection output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collect-bama
+          path: |
+            data/raw/
+            data/manifests/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  publish:
+    needs: [sheypoor-sweep, bama-collection-walk]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync
+
+      - name: Download per-source artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: collect-*
+          path: data/
+          merge-multiple: true
+
+      - name: Publish ingestion bundle
+        run: |
+          mkdir -p data/foundation-bundle/metrics
+          cp data/manifests/*.json data/foundation-bundle/metrics/ 2>/dev/null || true
+          uv run python scripts/generate_metrics_summary.py
+          cp -r data/raw/ data/foundation-bundle/raw/ 2>/dev/null || true
+          uv run python scripts/generate_bundle_meta.py
+          cd data/foundation-bundle && find . -type f ! -name SHA256SUMS -exec sha256sum {} \; > SHA256SUMS
+
+      - name: Upload ingestion bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: icmi-ingestion-${{ github.run_id }}
+          path: data/foundation-bundle/
+          retention-days: 90
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Foundation sweep summary" >> $GITHUB_STEP_SUMMARY
+          echo "- artifact: icmi-ingestion-${{ github.run_id }} (90-day retention)" >> $GITHUB_STEP_SUMMARY
+          echo "- import: \`auto_sync.py\` or \`sync_actions_artifact.py --run-id ${{ github.run_id }}\`" >> $GITHUB_STEP_SUMMARY

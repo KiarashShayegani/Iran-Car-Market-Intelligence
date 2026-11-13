@@ -38,9 +38,10 @@ sources:
   bama:
     enabled: true
     cadence: daily
-    max_listings_per_run: 60
+    max_listings_per_run: 25000   # TEMPORARY: foundation sweep (restore to 60)
+    max_pages_per_run: 700        # TEMPORARY: foundation sweep (restore to 3)
     max_pages_per_preset: 2
-    max_requests_per_run: 8
+    max_requests_per_run: 800     # TEMPORARY: foundation sweep (restore to 8)
     presets_per_run: 2
     rotation: deterministic   # presets rotate in listed order
     presets:
@@ -62,17 +63,17 @@ sources:
   sheypoor:
     enabled: true
     cadence: 2x_daily
-    max_listings_per_run: 60
-    max_pages_per_run: 3
-    max_requests_per_run: 5
+    max_listings_per_run: 5000   # TEMPORARY: foundation-probe ceilings (restore after)
+    max_pages_per_run: 40
+    max_requests_per_run: 50
     presets: []               # full feed, cursor pagination (rotating)
 
   hamrah_mechanic:
     enabled: true
     cadence: 2-3_per_week
-    max_listings_per_run: 60
-    max_pages_per_run: 3
-    max_requests_per_run: 5
+    max_listings_per_run: 5000   # TEMPORARY: foundation-probe ceilings
+    max_pages_per_run: 40
+    max_requests_per_run: 50
     presets: []
 
   divar:

@@ -9,9 +9,11 @@ def test_load_policy_validates():
     policy = load_policy()
     assert policy.schema_version == 2
     assert policy.sources["bama"].enabled
-    # measurement-derived budgets (2026-11-13): burst discipline
-    assert policy.sources["bama"].max_listings_per_run == 60
-    assert policy.sources["bama"].max_pages_per_preset == 2
+    # foundation-phase ceilings (2026-11-13): raised for deep corpus sweeps;
+    # the ROUTINE nightly schedule stays conservative via its small dispatch
+    # inputs — restore budget ceilings after the foundation completes.
+    assert policy.sources["bama"].max_listings_per_run == 25000
+    assert policy.sources["bama"].max_pages_per_run == 700
     assert policy.sources["bama"].presets_per_run == 2
     assert policy.sources["sheypoor"].cadence == "2x_daily"
     assert len(policy.sources["bama"].presets) == 14

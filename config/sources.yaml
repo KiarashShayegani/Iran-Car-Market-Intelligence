@@ -53,6 +53,13 @@ sources:
       full:
         description: Unfiltered newest feed (rotates — not an enumeration basis)
         params: {}
+      web-car:
+        description: >-
+          ALL vehicles, newest-first, deep-paginated (verified 2026-11-13 via
+          browser capture: pageIndex 1000+ returns full ads, ~30/page; the
+          metadata total_pages=2 LIES — real depth is unbounded). The
+          foundation-corpus enumeration basis. Skip pageIndex 0 (SEO variant).
+        params: {vehicle: car}
       brand-pride:
         description: پراید (saipa family)
         params: {vehicle: pride}
@@ -95,6 +102,34 @@ sources:
       brand-reera:
         description: ری‌را
         params: {vehicle: reera}
+      # Price-band partitions (verified 2026-11-13: priceFrom/priceTo params
+      # captured from the site's own filtered requests; bands are disjoint,
+      # deep-paginable streams covering the whole corpus — the foundation
+      # enumeration basis alongside vehicle=car):
+      band-0-300m:
+        description: قیمت تا ۳۰۰ میلیون
+        params: {priceFrom: "0", priceTo: "300000000"}
+      band-300m-700m:
+        description: قیمت ۳۰۰ تا ۷۰۰ میلیون
+        params: {priceFrom: "300000000", priceTo: "700000000"}
+      band-700m-1.2b:
+        description: قیمت ۷۰۰ میلیون تا ۱.۲ میلیارد
+        params: {priceFrom: "700000000", priceTo: "1200000000"}
+      band-1.2b-2b:
+        description: قیمت ۱.۲ تا ۲ میلیارد
+        params: {priceFrom: "1200000000", priceTo: "2000000000"}
+      band-2b-3.5b:
+        description: قیمت ۲ تا ۳.۵ میلیارد
+        params: {priceFrom: "2000000000", priceTo: "3500000000"}
+      band-3.5b-6b:
+        description: قیمت ۳.۵ تا ۶ میلیارد
+        params: {priceFrom: "3500000000", priceTo: "6000000000"}
+      band-6b-15b:
+        description: قیمت ۶ تا ۱۵ میلیارد
+        params: {priceFrom: "6000000000", priceTo: "15000000000"}
+      band-15b-plus:
+        description: قیمت بالای ۱۵ میلیارد
+        params: {priceFrom: "15000000000"}
     # Canonical fields Bama is known to be able to provide (from the research
     # notebook: 100% description coverage on 100 sampled listings).
     # source_published_at is a relative label, not an absolute timestamp.

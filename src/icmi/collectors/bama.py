@@ -96,6 +96,13 @@ class BamaCollector(BaseCollector):
     def has_more(self, page_payload: dict) -> bool:
         # Response envelope: {"status": true, "errors": [], "data": {"ads": [...],
         # "metadata": {"total_count", "total_pages", "has_next", ...}}}
+        #
+        # Bama's pagination metadata LIES: total_pages=2 observed while the
+        # same query walks 1000+ pages (verified 2026-11-13 via browser
+        # capture, vehicle=car and vehicle=pride alike). Trust nothing —
+        # walk until the base collector's stale-page detection (zero-new
+        # pages) or the page budget stops it. Cost of over-walk: 3 extra
+        # requests at true exhaustion (stale_page_streak).
         data = page_payload.get("data")
         metadata = data.get("metadata") if isinstance(data, dict) else None
         if isinstance(metadata, dict) and isinstance(metadata.get("has_next"), bool):
