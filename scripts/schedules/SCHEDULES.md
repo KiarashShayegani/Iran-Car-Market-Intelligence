@@ -12,9 +12,12 @@ fires exactly one run):**
 
 | Source | Cadence | Budget/run | Evidence base |
 |---|---|---|---|
-| Sheypoor | **2× daily** — 02:30 + 14:30 UTC (06:00 + 18:00 Tehran) | 3 pages, ≤60 target, ≤5 requests | rotating feed: every run is a fresh sample (0% overlap @28 min) |
-| Hamrah Mechanic | **Mon/Wed/Fri** 02:34 UTC (06:04 Tehran) | 3 pages, ≤60 target, ≤5 requests | stable inventory feed; 2-3x/week per policy |
-| Bama | **nightly** 02:30 UTC (06:00 Tehran) | **2 presets × 2 pages**, ≤60 target, ≤8 requests | preset rotation via scripts/preset_rotation.py; burst discipline: never same-night retries |
+| Sheypoor | **2× daily** — 02:30 + 14:30 UTC (06:00 + 18:00 Tehran) | 40-page sweeps, ≤5K target | covers measured ~200/day new-ad inflow; rotating feed |
+| Hamrah Mechanic | **Mon/Wed/Fri** 02:34 UTC (06:04 Tehran) | 3 pages, ≤5 requests | stable inventory feed; slow churn |
+| Bama | **2× daily** — 02:30 + 14:30 UTC (06:00 + 18:00 Tehran) | **100-page newest-first walk** (~3K ads), vehicle=car | foundation stream fully enumerated at ~39.7K (exhausted @page 1350); 100 pages ≈ daily inflow with overlap |
+
+Steady state since 2026-11-15 (foundation complete). Fine-tuning signal:
+duplicate-rate + new-listings per run (manifests + ingest reports).
 
 **Bama burst note (evidence-based):** the only cloud Bama failure
 (2026-11-12, 12/12 pages failed) followed **4 collection bursts within 25
