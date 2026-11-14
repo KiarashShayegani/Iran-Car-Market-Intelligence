@@ -39,7 +39,7 @@ import requests
 
 GITHUB_API = "https://api.github.com"
 REPO = "KiarashShayegani/Iran-Car-Market-Intelligence"
-EXPECTED_WORKFLOWS = ("h-ops-pipeline.yml", "collect-etl.yml")
+EXPECTED_WORKFLOWS = ("h-ops-pipeline.yml", "foundation-sweep.yml", "collect-etl.yml")
 INGESTION_PREFIX = "icmi-ingestion-"
 SNAPSHOT_PREFIX = "icmi-snapshot"
 
