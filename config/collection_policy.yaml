@@ -6,6 +6,10 @@
 # ceilings, so no caller can exceed them by accident. Schedules remain
 # disabled at the workflow level (owner gate, H-ops-5).
 #
+# Foundation phase COMPLETE (2026-11-15: bama global stream fully enumerated
+# at ~39.7K ads, exhausted at page ~1350). Steady-state budgets below catch
+# daily new-ad inflow (bama ~3-6K/day, sheypoor ~200/day — measured); the
+# duplicate-rate per run (manifests + ingest newness) is the tuning signal.
 # Budgets below are measurement-derived (2026-11-13, see
 # docs/internal/DATA_PIPELINE_AUDIT.md):
 #   - Sheypoor's unfiltered cursor feed ROTATES (0% overlap between runs
@@ -37,11 +41,11 @@ defaults:
 sources:
   bama:
     enabled: true
-    cadence: daily
-    max_listings_per_run: 25000   # TEMPORARY: foundation sweep (restore to 60)
-    max_pages_per_run: 700        # TEMPORARY: foundation sweep (restore to 3)
+    cadence: 2x_daily
+    max_listings_per_run: 25000   # newest-catching walk (~100 pages x ~30 ads)
+    max_pages_per_run: 150        # steady-state ceiling; scheduled inputs use 100
     max_pages_per_preset: 2
-    max_requests_per_run: 800     # TEMPORARY: foundation sweep (restore to 8)
+    max_requests_per_run: 200     # 100-page walk + retry headroom
     presets_per_run: 2
     rotation: deterministic   # presets rotate in listed order
     presets:

@@ -9,11 +9,10 @@ def test_load_policy_validates():
     policy = load_policy()
     assert policy.schema_version == 2
     assert policy.sources["bama"].enabled
-    # foundation-phase ceilings (2026-11-13): raised for deep corpus sweeps;
-    # the ROUTINE nightly schedule stays conservative via its small dispatch
-    # inputs — restore budget ceilings after the foundation completes.
+    # steady-state ceilings (2026-11-15): newest-catching walks sized to the
+    # measured daily inflow; foundation-phase deep ceilings tightened back.
     assert policy.sources["bama"].max_listings_per_run == 25000
-    assert policy.sources["bama"].max_pages_per_run == 700
+    assert policy.sources["bama"].max_pages_per_run == 150
     assert policy.sources["bama"].presets_per_run == 2
     assert policy.sources["sheypoor"].cadence == "2x_daily"
     assert len(policy.sources["bama"].presets) == 14
