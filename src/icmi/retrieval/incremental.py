@@ -83,19 +83,39 @@ def incremental_index_build(
         else:
             encode_positions.append(pos)
 
-    new_vectors_list: list[np.ndarray] = [None] * len(chunks)  # type: ignore[list-item]
+    # Checkpointed encoding: carried rows are written first, then the missing
+    # chunks are encoded in slices — after each slice the partial index is
+    # saved atomically. A thermal/kill abort loses at most one slice; the next
+    # invocation carries the checkpoint over by content_hash. The partial
+    # index is fully valid and searchable (it simply covers fewer chunks).
+    vectors_rows: list[np.ndarray] = []
+    meta_rows: list = []
     for pos, vec in carry:
-        new_vectors_list[pos] = vec
-    if encode_positions:
-        texts = [chunks[p].normalized_text for p in encode_positions]
-        encoded = np.asarray(encoder.encode_passages(texts))
-        for i, p in enumerate(encode_positions):
-            new_vectors_list[p] = encoded[i]
-    vectors = np.asarray(new_vectors_list)
+        vectors_rows.append(vec)
+        meta_rows.append(chunks[pos])
 
-    save_index(vectors, chunks, model_id, out)
+    newly_encoded = 0
+    slice_size = 1500
+    if encode_positions:
+        missing = [chunks[p] for p in encode_positions]
+        for start in range(0, len(missing), slice_size):
+            sl = missing[start:start + slice_size]
+            encoded = np.asarray(
+                encoder.encode_passages([c.normalized_text for c in sl])
+            )
+            for chunk, vec in zip(sl, encoded):
+                vectors_rows.append(vec)
+                meta_rows.append(chunk)
+            newly_encoded += len(sl)
+            save_index(np.asarray(vectors_rows), meta_rows, model_id, out)
+
+    if vectors_rows:
+        save_index(np.asarray(vectors_rows), meta_rows, model_id, out)
+
     return {
         "total_chunks": len(chunks),
         "carried_over": len(carry),
-        "newly_encoded": len(encode_positions),
+        "newly_encoded": newly_encoded,
+        "indexed_now": len(vectors_rows),
+        "pending": len(chunks) - len(vectors_rows),
     }
