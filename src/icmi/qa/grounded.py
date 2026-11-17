@@ -101,7 +101,9 @@ def build_evidence(
     for ev in evidence:
         if ev.listing_key not in by_key.index:
             continue
-        row = by_key.loc[ev.listing_key]
+        # multi-chunk listings appear once per chunk — take the first row
+        # (iloc guarantees a Series even when the key matches several rows)
+        row = by_key.loc[[ev.listing_key]].iloc[0]
         iuj = row.get("image_urls_json")
         if isinstance(iuj, str) and iuj.startswith("["):
             try:
@@ -110,26 +112,21 @@ def build_evidence(
                     ev.image_url = urls[0]
             except ValueError:
                 pass
-        ev.price_amount = (
-            int(row["price_amount"])
-            if row.get("price_amount") is not None
-            and not pd.isna(row["price_amount"])
-            else None
-        )
-        ev.year_num = (
-            int(row["year_num"])
-            if row.get("year_num") is not None and not pd.isna(row["year_num"])
-            else None
-        )
-        ev.year_calendar = row.get("year_calendar")
-        ev.mileage_km = (
-            int(row["mileage_km"])
-            if row.get("mileage_km") is not None and not pd.isna(row["mileage_km"])
-            else None
-        )
-        ev.location_raw = row.get("location_raw")
-        ev.brand_raw = row.get("brand_raw")
-        ev.model_raw = row.get("model_raw")
+
+        def scalar(col: str):
+            v = row.get(col)
+            return None if v is None or pd.isna(v) else v
+
+        price = scalar("price_amount")
+        ev.price_amount = int(price) if price is not None else None
+        year = scalar("year_num")
+        ev.year_num = int(year) if year is not None else None
+        ev.year_calendar = scalar("year_calendar")
+        mileage = scalar("mileage_km")
+        ev.mileage_km = int(mileage) if mileage is not None else None
+        ev.location_raw = scalar("location_raw")
+        ev.brand_raw = scalar("brand_raw")
+        ev.model_raw = scalar("model_raw")
     return evidence
 
 
