@@ -172,9 +172,11 @@ def answer_agentic(
             plan.refined_query, filters=filters, top_k=top_k, sort="relevance"
         )
         trace.search_calls += 1
+        # SearchResponse carries no .mode attribute — derive it from filters
+        mode = "hybrid" if not filters.is_empty() else "semantic"
         trace.steps.append({
             "step": "search", "call": 1, "results": len(response.results),
-            "mode": response.mode,
+            "mode": mode,
         })
     except Exception as exc:  # noqa: BLE001 — retrieval failure → fallback below
         trace.steps.append({"step": "search", "call": 1, "error": str(exc)})

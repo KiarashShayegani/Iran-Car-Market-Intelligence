@@ -134,3 +134,22 @@ def test_agentic_intent_failure_falls_back_to_plain_search():
 def test_agentic_no_client_raises():
     with pytest.raises(LLMError):
         answer_agentic("q", FakeService([1]), None)
+
+
+def test_models_filter_prefix_matching():
+    """Regression (2026-11-18): the agentic path extracts short model
+    references ('206') from user questions — the corpus stores full trim
+    variants ('206 sd v20'). Prefix matching must bridge them."""
+    import pandas as pd
+
+    from icmi.retrieval.search import SearchFilters, _apply_filters
+
+    frame = pd.DataFrame({
+        "listing_key": ["a", "b", "c"],
+        "model_raw": ["206 sd v20", "206 (تیپ2)", "پارس"],
+        "brand_key": ["پژو", "پژو", "پژو"],
+        "price_amount": [900_000_000, 800_000_000, 1_500_000_000],
+    })
+    filters = SearchFilters(models=["206"], price_max=1_000_000_000)
+    out = _apply_filters(frame, filters)
+    assert set(out["listing_key"]) == {"a", "b"}

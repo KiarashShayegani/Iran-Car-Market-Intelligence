@@ -138,8 +138,15 @@ def _apply_filters(metadata: pd.DataFrame, filters: SearchFilters) -> pd.DataFra
         wanted = {normalize_for_key(b) for b in filters.brands}
         mask &= metadata["brand_key"].isin(wanted)
     if filters.models:
-        wanted = {normalize_for_key(m) for m in filters.models}
-        mask &= metadata["model_key"].isin(wanted)
+        # contains-match on the normalized raw model: a user/agentic model
+        # reference ("206") must match every trim variant in the corpus
+        # ("206 sd v20", "206 (تیپ2)") — model_key is a composite key
+        # (year-prefixed), so exact/prefix matching on it fails.
+        wanted = [normalize_for_key(m) for m in filters.models if m]
+        mask &= metadata["model_raw"].apply(
+            lambda raw: any(w in normalize_for_key(str(raw)) for w in wanted if w)
+            if raw is not None else False
+        )
     if filters.price_min is not None:
         mask &= metadata["price_amount"].notna() & (metadata["price_amount"] >= filters.price_min)
     if filters.price_max is not None:
