@@ -607,6 +607,14 @@ def create_app(
                         "original_url": c.original_url,
                         "score": c.score,
                         "excerpt": c.text,
+                        "image_url": c.image_url,
+                        "price_amount": c.price_amount,
+                        "year_num": c.year_num,
+                        "year_calendar": c.year_calendar,
+                        "mileage_km": c.mileage_km,
+                        "location_raw": c.location_raw,
+                        "brand_raw": c.brand_raw,
+                        "model_raw": c.model_raw,
                     }
                     for c in answer.citations
                 ],

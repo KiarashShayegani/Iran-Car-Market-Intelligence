@@ -16,9 +16,12 @@ dependency, no local inference.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass, field
+
+import pandas as pd
 
 from icmi.retrieval.search import SearchResponse
 
@@ -46,6 +49,16 @@ class Evidence:
     text: str  # indexed document text (contains the source description verbatim)
     original_url: str | None
     score: float
+    # card fields (enriched from the service metadata when available) — used
+    # by the frontend to render cited listings as real ad cards
+    image_url: str | None = None
+    price_amount: int | None = None
+    year_num: int | None = None
+    year_calendar: str | None = None
+    mileage_km: int | None = None
+    location_raw: str | None = None
+    brand_raw: str | None = None
+    model_raw: str | None = None
 
 
 @dataclass
@@ -66,8 +79,12 @@ class GroundedAnswer:
     steps: list = field(default_factory=list)
 
 
-def build_evidence(response: SearchResponse) -> list[Evidence]:
-    return [
+def build_evidence(
+    response: SearchResponse, metadata: "pd.DataFrame | None" = None
+) -> list[Evidence]:
+    """Build evidence; when the service metadata frame is supplied, enrich
+    each item with the card fields (image, price, year, mileage, ...)."""
+    evidence = [
         Evidence(
             index=i,
             listing_key=r.listing_key,
@@ -78,6 +95,42 @@ def build_evidence(response: SearchResponse) -> list[Evidence]:
         )
         for i, r in enumerate(response.results, start=1)
     ]
+    if metadata is None or "listing_key" not in metadata.columns:
+        return evidence
+    by_key = metadata.set_index("listing_key")
+    for ev in evidence:
+        if ev.listing_key not in by_key.index:
+            continue
+        row = by_key.loc[ev.listing_key]
+        iuj = row.get("image_urls_json")
+        if isinstance(iuj, str) and iuj.startswith("["):
+            try:
+                urls = json.loads(iuj)
+                if isinstance(urls, list) and urls:
+                    ev.image_url = urls[0]
+            except ValueError:
+                pass
+        ev.price_amount = (
+            int(row["price_amount"])
+            if row.get("price_amount") is not None
+            and not pd.isna(row["price_amount"])
+            else None
+        )
+        ev.year_num = (
+            int(row["year_num"])
+            if row.get("year_num") is not None and not pd.isna(row["year_num"])
+            else None
+        )
+        ev.year_calendar = row.get("year_calendar")
+        ev.mileage_km = (
+            int(row["mileage_km"])
+            if row.get("mileage_km") is not None and not pd.isna(row["mileage_km"])
+            else None
+        )
+        ev.location_raw = row.get("location_raw")
+        ev.brand_raw = row.get("brand_raw")
+        ev.model_raw = row.get("model_raw")
+    return evidence
 
 
 def format_user_prompt(question: str, evidence: list[Evidence]) -> str:
@@ -175,17 +228,33 @@ def client_from_env() -> OpenAICompatibleClient | None:
     )
 
 
+CURATION_DIRECTIVE = """
+نکات صرعی پاسخ در این حالت:
+۱. خلاصه، مستقیم و بدون مقدمه‌چینی بنویس (متن پاسخ حداکثر ~۱۰۰ کلمه).
+۲. از میان شواهد، فقط ۳ تا ۵ آگهیِ مرتبط‌ترین را انتخاب کن و با [n] معرفی کن
+   — برای هر کدام یک جملهٔ کوتاه (قیمت/سال/کارکرد/مزیت اصلی).
+۳. کارت‌های آگهی جداگانه در رابط کاربری نمایش داده می‌شوند؛ در متن فقط
+   تحلیل کوتاه و تفاوت‌های مهم بیاور، لیست طولی ننویس.
+۴. اگر کمتر از ۳ آگهی واقعاً مرتبط است، همان تعداد کم را معرفی کن."""
+
+
 def answer_question(
     question: str,
     response: SearchResponse,
     client,
+    metadata=None,
+    curation_directive: str | None = None,
 ) -> GroundedAnswer:
     """Retrieve → prompt → complete → parse citations. `client` is any object
-    with .complete(system, user) — injectable for tests."""
-    evidence = build_evidence(response)
+    with .complete(system, user) — injectable for tests. `metadata` enriches
+    evidence with card fields; `curation_directive` appends answer-style
+    rules (used by the agentic flow for concise curated answers)."""
+    evidence = build_evidence(response, metadata)
     if client is None:
         raise LLMError("LLM is not configured (set LLM_BASE_URL)")
     user_prompt = format_user_prompt(question, evidence)
+    if curation_directive:
+        user_prompt += "\n\n" + curation_directive
     answer_text = client.complete(SYSTEM_PROMPT, user_prompt)
     citations = parse_citations(answer_text, evidence)
     return GroundedAnswer(

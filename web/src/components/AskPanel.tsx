@@ -3,12 +3,19 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import VehicleImage from "@/components/VehicleImage";
+import PlatformMark from "@/components/PlatformMark";
 import {
   AskApiResponse,
   Citation,
   EMPTY_FILTERS,
   FiltersState,
   askQuestion,
+  formatNumber,
+  formatToman,
+  formatYearText,
+  getCompareKeys,
+  toggleCompareKey,
 } from "@/lib/api";
 
 export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: FiltersState }) {
@@ -124,12 +131,12 @@ export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: Filter
 
           {answer.citations.length > 0 && (
             <div>
-              <p className="text-xs font-semibold mb-2">
-                آگهی‌های مرجع پاسخ ({answer.citations.length} از {answer.evidence_count} شاهد):
+              <p className="text-sm font-semibold mb-2">
+                آگهی‌های پیشنهادی برای پرسش شما:
               </p>
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {answer.citations.map((c) => (
-                  <CitationCard key={`${c.index}-${c.listing_key}`} citation={c} />
+                  <CitationAdCard key={`${c.index}-${c.listing_key}`} citation={c} />
                 ))}
               </div>
             </div>
@@ -165,46 +172,99 @@ export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: Filter
   );
 }
 
-function CitationCard({ citation }: { citation: Citation }) {
+function CitationAdCard({ citation }: { citation: Citation }) {
   const [platform, id] = citation.listing_key.split(":");
+  const [compareKeys, setCompareKeys] = useState<string[]>(getCompareKeys());
+  const inCompare = compareKeys.includes(citation.listing_key);
+  const title =
+    [citation.brand_raw, citation.model_raw]
+      .filter(Boolean)
+      .join(" ") || "—";
+
+  const toggleCompare = () => {
+    toggleCompareKey(citation.listing_key);
+    setCompareKeys(getCompareKeys());
+    window.dispatchEvent(new Event("icmi-compare-change"));
+  };
+
   return (
-    <div className="card p-3 flex items-center gap-3">
+    <div className="card card-hover overflow-hidden relative">
+      {/* citation index badge */}
       <span
-        className="flex items-center justify-center rounded-lg font-bold shrink-0"
+        className="absolute top-2 right-2 z-10 flex items-center justify-center rounded-lg font-bold num"
         style={{
-          width: 34,
-          height: 34,
-          background: "var(--teal-soft)",
-          color: "var(--secondary)",
+          width: 30,
+          height: 30,
+          background: "var(--brand-700, #14514F)",
+          color: "#fff",
+          fontSize: 13,
         }}
+        title="شمارهٔ ارجاع در پاسخ"
       >
         [{citation.index}]
       </span>
-      <div className="min-w-0 flex-1">
-        {citation.excerpt && (
-          <p className="text-xs truncate mb-0.5" style={{ color: "var(--muted)" }}>
-            {citation.excerpt.slice(0, 110)}
-          </p>
-        )}
-        <a
-          href={`/listings/${platform}/${id}`}
-          className="text-xs font-semibold"
-          style={{ color: "var(--secondary)" }}
-        >
-          مشاهدهٔ آگهی در خودروبان →
-        </a>
+      <a href={`/listings/${platform}/${id}`} className="block">
+        <VehicleImage
+          src={citation.image_url}
+          alt={title}
+          className="aspect-[4/3] w-full"
+        />
+      </a>
+      <div className="p-3">
+        <div className="flex items-center justify-between gap-2">
+          <PlatformMark platform={citation.source_platform} />
+          {citation.price_amount !== null && citation.price_amount !== undefined && (
+            <span className="num text-sm font-bold" style={{ color: "var(--accent)" }}>
+              {formatToman(citation.price_amount)}
+            </span>
+          )}
+        </div>
+        <p className="mt-2 text-sm font-bold truncate">{title}</p>
+        <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+          {citation.year_num !== null && citation.year_num !== undefined && (
+            <span className="chip btn-secondary num">
+              سال {formatYearText(citation.year_num ?? null, citation.year_calendar ?? null, null)}
+            </span>
+          )}
+          {citation.mileage_km !== null && citation.mileage_km !== undefined && (
+            <span className="chip btn-secondary num">
+              کارکرد {formatNumber(citation.mileage_km)} کیلومتر
+            </span>
+          )}
+          {citation.location_raw && (
+            <span className="chip btn-secondary truncate max-w-[9rem]">
+              {citation.location_raw}
+            </span>
+          )}
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <a
+            href={`/listings/${platform}/${id}`}
+            className="text-xs font-semibold"
+            style={{ color: "var(--secondary)" }}
+          >
+            جزئیات در خودروبان →
+          </a>
+          {citation.original_url && (
+            <a
+              href={citation.original_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs inline-flex items-center gap-1"
+              style={{ color: "var(--accent)" }}
+            >
+              آگهی اصلی ↗
+            </a>
+          )}
+          <button
+            onClick={toggleCompare}
+            className={`chip shrink-0 mr-auto ${inCompare ? "score-high" : "btn-secondary"}`}
+            title="افزودن/حذف از مقایسه"
+          >
+            ⚖️
+          </button>
+        </div>
       </div>
-      {citation.original_url && (
-        <a
-          href={citation.original_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="chip btn-secondary shrink-0"
-          title="مشاهده در منبع اصلی"
-        >
-          منبع اصلی ↗
-        </a>
-      )}
     </div>
   );
 }

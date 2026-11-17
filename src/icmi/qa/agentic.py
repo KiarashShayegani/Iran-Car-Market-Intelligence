@@ -29,6 +29,7 @@ import json
 import re
 from dataclasses import dataclass, field
 
+from icmi.qa.grounded import CURATION_DIRECTIVE
 from icmi.retrieval.normalization import normalize_for_key
 from icmi.qa.grounded import (
     INSUFFICIENT_MARKER,
@@ -198,20 +199,26 @@ def answer_agentic(
     if response is None:
         raise LLMError("retrieval failed — no search results available")
 
-    # --- step 3: grounded answer (unchanged hard contract) ---
-    from icmi.qa.grounded import answer_question, build_evidence
+    # --- step 3: grounded answer with curation (concise, 3-5 picks) ---
+    from icmi.qa.grounded import answer_question
 
-    evidence = build_evidence(response)
-    answer = answer_question(question, response, client)
+    answer = answer_question(
+        question,
+        response,
+        client,
+        metadata=service.metadata,
+        curation_directive=CURATION_DIRECTIVE,
+    )
     if INSUFFICIENT_MARKER in answer.answer:
         trace.steps.append({"step": "answer", "insufficient_evidence": True})
     else:
         trace.steps.append({
             "step": "answer", "citations": len(answer.citations),
-            "evidence": len(evidence),
+            "evidence_count": answer.evidence_count,
         })
     answer.mode = "agentic"
-    answer.listing_keys = [ev.listing_key for ev in evidence]
+    # the frontend renders the LLM's cited picks as ad cards — not all evidence
+    answer.listing_keys = [c.listing_key for c in answer.citations]
     trace.filters_used = trace.filters_used or {"query": plan.refined_query}
     answer.filters_used = dict(trace.filters_used)
     answer.steps = trace.steps

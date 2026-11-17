@@ -25,10 +25,28 @@ class MockClient:
         return self.answer
 
 
+import pandas as pd
+
+
 class FakeService:
     def __init__(self, results_per_call: list[int]):
         self.results_per_call = results_per_call
         self.calls = 0
+        # metadata frame with card fields (mirrors the real service contract)
+        rows = []
+        for i in range(20):
+            rows.append({
+                "listing_key": f"bama:{100 + i}",
+                "image_urls_json": f'["https://img.example/{100 + i}.jpg"]',
+                "price_amount": 700_000_000 + i * 10_000_000,
+                "year_num": 1395 + (i % 5),
+                "year_calendar": "shamsi",
+                "mileage_km": 50_000 + i * 1_000,
+                "location_raw": "تهران",
+                "brand_raw": "پژو",
+                "model_raw": "206 تیپ 5",
+            })
+        self.metadata = pd.DataFrame(rows)
 
     def search(self, query, filters=None, top_k=6, offset=0, sort="relevance"):
         n = self.results_per_call[min(self.calls, len(self.results_per_call) - 1)]
@@ -108,9 +126,14 @@ def test_agentic_happy_path_uses_filters_and_returns_structured_payload():
     assert trace.search_calls == 1
     assert trace.filters_used.get("brand") == "پژو"
     assert answer.mode == "agentic"
-    assert answer.listing_keys == ["bama:100", "bama:101", "bama:102",
-                                   "bama:103", "bama:104", "bama:105"]
+    # curated semantics: listing_keys = the LLM's cited picks only ([1]),
+    # not all evidence — and evidence is enriched with card fields
+    assert answer.listing_keys == ["bama:100"]
     assert answer.grounded and not answer.insufficient_evidence
+    assert answer.citations[0].image_url == "https://img.example/100.jpg"
+    assert answer.citations[0].price_amount == 700_000_000
+    assert answer.citations[0].year_num == 1395
+    assert answer.citations[0].location_raw == "تهران"
 
 
 def test_agentic_sparse_triggers_one_refinement_within_budget():
@@ -120,7 +143,8 @@ def test_agentic_sparse_triggers_one_refinement_within_budget():
     answer, trace = answer_agentic("پراید؟", service, client)
     assert service.calls == 2
     assert trace.search_calls <= MAX_SEARCH_CALLS
-    assert len(answer.listing_keys) == 6
+    # citations only (the mock answer cites [1]) — curated picks
+    assert len(answer.listing_keys) == 1
 
 
 def test_agentic_intent_failure_falls_back_to_plain_search():
@@ -128,7 +152,9 @@ def test_agentic_intent_failure_falls_back_to_plain_search():
     service = FakeService([5])
     answer, trace = answer_agentic("پراید؟", service, client)
     assert any(s.get("step") == "intent" and not s.get("ok") for s in trace.steps)
-    assert len(answer.listing_keys) == 5
+    # the mock answer cites only [1] — citations map to cited picks
+    assert len(answer.citations) == 1
+    assert answer.citations[0].image_url is not None  # enrichment applied
 
 
 def test_agentic_no_client_raises():

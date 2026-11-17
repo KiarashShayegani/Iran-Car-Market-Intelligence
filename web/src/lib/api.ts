@@ -94,6 +94,14 @@ export interface Citation {
   original_url: string | null;
   score: number;
   excerpt?: string;
+  image_url?: string | null;
+  price_amount?: number | null;
+  year_num?: number | null;
+  year_calendar?: string | null;
+  mileage_km?: number | null;
+  location_raw?: string | null;
+  brand_raw?: string | null;
+  model_raw?: string | null;
 }
 
 export interface AskApiResponse {
