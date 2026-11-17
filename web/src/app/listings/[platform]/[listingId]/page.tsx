@@ -58,10 +58,11 @@ export default function ListingDetailPage() {
             href={listing.original_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 text-sm underline"
-            style={{ color: "var(--accent)" }}
+            className="btn flex items-center gap-1.5 !px-4 !py-2 !text-sm"
+            title="مشاهدهٔ آگهی در منبع اصلی"
           >
-            آگهی اصلی <ExternalLink size={14} />
+            <ExternalLink size={15} />
+            مشاهدهٔ آگهی اصلی
           </a>
         )}
       </div>
@@ -176,16 +177,25 @@ export default function ListingDetailPage() {
         </div>
       )}
 
-      {/* provenance */}
+      {/* provenance — user-facing source & trust info */}
       <div className="card p-4 text-xs space-y-1" style={{ color: "var(--muted)" }}>
-        <p>ردیابی داده: شناسه {listing.listing_key} · نسخهٔ استخراج {listing.extraction_version}</p>
-        <p>
-          ارجاع داده خام: <span className="num">{listing.raw_payload_ref_json.slice(0, 120)}</span>
+        <p className="text-sm font-bold" style={{ color: "var(--foreground)" }}>
+          منبع و اصالت
         </p>
         <p>
-          اولین مشاهده: {listing.first_seen_at.slice(0, 16)} · آخرین:{" "}
-          {listing.last_seen_at.slice(0, 16)}
+          منبع: {PLATFORM_LABELS[listing.source_platform] ?? listing.source_platform} · اولین
+          مشاهده: <span className="num">{listing.first_seen_at.slice(0, 10)}</span> · آخرین
+          بررسی: <span className="num">{listing.last_seen_at.slice(0, 10)}</span>
         </p>
+        <details className="mt-1">
+          <summary className="cursor-pointer select-none" style={{ color: "var(--secondary)" }}>
+            اطلاعات فنی ردیابی داده
+          </summary>
+          <p className="mt-1">شناسه: <span className="num">{listing.listing_key}</span> · نسخهٔ استخراج: {listing.extraction_version}</p>
+          <p>
+            ارجاع داده خام: <span className="num">{listing.raw_payload_ref_json.slice(0, 120)}</span>
+          </p>
+        </details>
       </div>
     </div>
   );

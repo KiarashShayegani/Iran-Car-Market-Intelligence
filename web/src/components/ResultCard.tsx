@@ -7,6 +7,8 @@ import {
   SearchResultItem,
   formatNumber,
   formatToman,
+  formatYear,
+  formatYearText,
   getCompareKeys,
   scoreBand,
   toggleCompareKey,
@@ -57,8 +59,16 @@ export default function ResultCard({ result }: { result: SearchResultItem }) {
 
           <div className="mt-2 flex items-center gap-1.5 flex-wrap">
             {result.year_num !== null && (
-              <span className="chip btn-secondary num">
-                سال {formatNumber(result.year_num)}
+              <span
+                className="chip btn-secondary num"
+                title={formatYearText(result.year_num, result.year_calendar, result.year_raw)}
+              >
+                سال{" "}
+                <span
+                  dangerouslySetInnerHTML={{
+                    __html: formatYear(result.year_num, result.year_calendar, result.year_raw),
+                  }}
+                />
               </span>
             )}
             {result.mileage_km !== null && (

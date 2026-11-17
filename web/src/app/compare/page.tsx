@@ -41,12 +41,61 @@ function CompareContent() {
 
   if (error)
     return (
-      <div className="card p-6 text-sm" style={{ color: "#991b1b" }}>
-        ⚠️ {error}
+      <div className="card p-8 text-center">
+        <p className="text-sm font-bold mb-2">مقایسه خالی است</p>
+        <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+          {error} — آگهی‌ها را از کارت‌های نتایج جستجو با دکمهٔ «مقایسه» انتخاب کنید.
+        </p>
+        <a href="/search" className="btn !px-5 !py-2 !text-sm inline-flex items-center gap-1.5">
+          🔍 رفتن به جستجوی خودروها
+        </a>
       </div>
     );
   if (!data) return <div className="card p-6 text-sm">در حال دریافت…</div>;
   const vehicles = data.vehicles;
+
+  // price-position intelligence: advertised price vs the vehicle's own
+  // comparable-market band (honest, sample-size aware)
+  function pricePosition(v: CompareVehicle): {
+    label: string;
+    color: string;
+    detail: string;
+  } | null {
+    const price = v.listing.price_amount;
+    const { median, p25, p75, count } = v.market_range;
+    if (price === null || median === null || count < 3) {
+      return count > 0
+        ? { label: "نمونهٔ کم", color: "var(--warning-text)", detail: `${count} آگهی مشابه — قضاوت معتبر نیست` }
+        : null;
+    }
+    const diffPct = Math.round(((price - median) / median) * 100);
+    const below = diffPct < -8;
+    const above = diffPct > 8;
+    const inBand = p25 !== null && p75 !== null && price >= p25 && price <= p75;
+    if (inBand)
+      return {
+        label: "داخل بازهٔ بازار",
+        color: "var(--success)",
+        detail: `${diffPct >= 0 ? "+" : ""}${diffPct}٪ نسبت به میانهٔ ${count} آگهی مشابه`,
+      };
+    if (below)
+      return {
+        label: "زیر قیمت بازار",
+        color: "var(--success)",
+        detail: `${Math.abs(diffPct)}٪ ارزان‌تر از میانهٔ ${count} آگهی مشابه — بررسی وضعیت آگهی توصیه می‌شود`,
+      };
+    if (above)
+      return {
+        label: "بالاتر از قیمت بازار",
+        color: "var(--danger)",
+        detail: `${diffPct}٪ گران‌تر از میانهٔ ${count} آگهی مشابه`,
+      };
+    return {
+      label: "نزدیک میانهٔ بازار",
+      color: "var(--info-text)",
+      detail: `${diffPct >= 0 ? "+" : ""}${diffPct}٪ نسبت به ${count} آگهی مشابه`,
+    };
+  }
 
   const specRows: { label: string; pick: (v: CompareVehicle) => string | null }[] = [
     { label: "برند", pick: (v) => v.listing.brand_raw },
@@ -97,18 +146,30 @@ function CompareContent() {
               />
               <div className="p-3">
                 <p className="text-sm font-bold">{v.listing.title ?? "—"}</p>
-                <p className="mt-1 text-xs num" style={{ color: "var(--muted)" }}>
-                  {v.listing.listing_key}
-                </p>
                 <a
                   href={v.listing.original_url ?? undefined}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-block text-xs underline"
+                  className="mt-1 inline-flex items-center gap-1 text-xs underline"
                   style={{ color: "var(--accent)" }}
                 >
-                  آگهی اصلی ↗
+                  مشاهدهٔ آگهی اصلی ↗
                 </a>
+                {(() => {
+                  const pos = pricePosition(v);
+                  if (!pos) return null;
+                  return (
+                    <div
+                      className="mt-2 rounded-lg p-2 text-xs"
+                      style={{ background: "var(--bg-muted)" }}
+                    >
+                      <p className="font-bold" style={{ color: pos.color }}>
+                        {pos.label}
+                      </p>
+                      <p style={{ color: "var(--muted)" }}>{pos.detail}</p>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           );

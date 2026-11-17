@@ -25,6 +25,7 @@ from icmi.core.config import load_sources
 from icmi.core.paths import index_dir
 from icmi.pipeline.normalize import normalize_year
 from icmi.pipeline.store import CanonicalStore
+from icmi.qa.agentic import answer_agentic
 from icmi.qa.grounded import LLMError, answer_question, client_from_env
 from icmi.retrieval.encoder import DEFAULT_MODEL_ID, get_encoder
 from icmi.retrieval.index import INDEX_FORMAT_VERSION, load_index
@@ -33,6 +34,7 @@ from icmi.retrieval.search import SearchFilters, SearchService
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=2)
+    mode: str = Field(default="agentic")  # "agentic" | "simple"
     platforms: list[str] = Field(default_factory=list)
     price_max: int | None = None
     price_min: int | None = None
@@ -424,6 +426,7 @@ def create_app(
                     "body_type_raw": None if meta is None else _nan_safe(meta["body_type_raw"]),
                     "year_num": None if meta is None else _int_safe(meta["year_num"]),
                     "year_calendar": None if meta is None else _nan_safe(meta["year_calendar"]),
+                    "year_raw": None if meta is None else _nan_safe(meta.get("year_raw")),
                     "price_amount": None if meta is None else _int_safe(meta["price_amount"]),
                     "mileage_km": None if meta is None else _int_safe(meta["mileage_km"]),
                     "location_raw": None if meta is None else _nan_safe(meta["location_raw"]),
@@ -573,12 +576,48 @@ def create_app(
             year_calendar=request.year_calendar,
             mileage_max_km=request.mileage_max_km,
         )
+        if request.mode == "agentic":
+            try:
+                answer, trace = answer_agentic(
+                    request.question,
+                    get_search_service(),
+                    client,
+                    platforms=request.platforms,
+                    top_k=request.top_k,
+                )
+            except LLMError as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from None
+            return {
+                "question": answer.question,
+                "answer": answer.answer,
+                "grounded": answer.grounded,
+                "insufficient_evidence": answer.insufficient_evidence,
+                "model_id": answer.model_id,
+                "evidence_count": answer.evidence_count,
+                "candidates_after_filters": answer.candidates_after_filters,
+                "mode": "agentic",
+                "listing_keys": answer.listing_keys,
+                "filters_used": answer.filters_used,
+                "steps": answer.steps,
+                "citations": [
+                    {
+                        "index": c.index,
+                        "listing_key": c.listing_key,
+                        "source_platform": c.source_platform,
+                        "original_url": c.original_url,
+                        "score": c.score,
+                        "excerpt": c.text,
+                    }
+                    for c in answer.citations
+                ],
+            }
         response = get_search_service().search(request.question, filters, top_k=request.top_k)
         try:
             answer = answer_question(request.question, response, client)
         except LLMError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from None
         return {
+            "mode": "simple",
             "question": answer.question,
             "answer": answer.answer,
             "grounded": answer.grounded,

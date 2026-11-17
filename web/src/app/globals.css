@@ -5,12 +5,14 @@
    Amber has a dedicated text-safe variant (WCAG-aware). */
 :root {
   /* surfaces */
-  --background: #f6f7f7;
-  --foreground: #202d32;
+  --background: #f4f7f5;
+  --foreground: #16211f;
+  --ink-2: #5c6b66;
   --card: #ffffff;
-  --border: #dfe6e3;
+  --border: #e3eae6;
   --muted: #5e6e76;
   --bg-muted: #eef1f0;
+  --radius: 12px;
 
   /* brand */
   --primary: #123c46;        /* petrol blue */
@@ -217,4 +219,26 @@ textarea:focus {
   border-radius: 0.3rem;
   padding: 0.1em 0.4em;
   font-size: 0.85em;
+}
+
+/* GUI evolution (2026-11-17): refined foundations */
+.year-orig {
+  font-size: 0.72em;
+  color: var(--muted);
+  font-weight: 500;
+}
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-muted) 25%, #e6ebe9 50%, var(--bg-muted) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-wave 1.4s infinite;
+  border-radius: 8px;
+}
+@keyframes skeleton-wave {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }

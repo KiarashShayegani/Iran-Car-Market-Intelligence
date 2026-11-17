@@ -4,11 +4,14 @@ import { useState } from "react";
 import {
   API_BASE,
   CALENDAR_LABELS,
+  FacetsApiResponse,
   ListingDetail,
   PLATFORM_LABELS,
+  fetchFacets,
   formatNumber,
   formatToman,
 } from "@/lib/api";
+import { useEffect } from "react";
 
 interface EstimateResponse {
   brand_key: string;
@@ -47,6 +50,21 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<EstimateResponse | null>(null);
   const [detail, setDetail] = useState<ListingDetail | null>(null);
+  const [facets, setFacets] = useState<FacetsApiResponse | null>(null);
+  const [guided, setGuided] = useState(true);
+
+  useEffect(() => {
+    fetchFacets().then(setFacets).catch(() => {});
+  }, []);
+
+  const selectedBrandFacet = facets?.brands.find((b) => b.label === brand) ?? null;
+  const yearOptions: number[] = [];
+  if (facets?.bounds.min_year && facets?.bounds.max_year) {
+    // plausible Jalali window only (display policy: years are shown Jalali)
+    const lo = Math.max(1360, Math.min(facets.bounds.min_year, 1400) - 0);
+    const hi = Math.min(1406, facets.bounds.max_year);
+    for (let y = hi; y >= lo; y--) yearOptions.push(y);
+  }
 
   const submit = async () => {
     if (!brand.trim()) return;
@@ -78,15 +96,72 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
           مدل یادگیری، بدون حدس؛ هر تخمین همراه با نمونه‌های قابل‌بررسی ارائه
           می‌شود.
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <input type="text" value={brand} onChange={(e) => setBrand(e.target.value)}
-            placeholder="برند * (پژو)" />
-          <input type="text" value={model} onChange={(e) => setModel(e.target.value)}
-            placeholder="مدل (206)" />
-          <input type="text" value={year} onChange={(e) => setYear(e.target.value)}
-            placeholder="سال (1398)" />
-          <input type="number" value={mileage} onChange={(e) => setMileage(e.target.value)}
-            placeholder="کارکرد (45000)" />
+        {guided && facets ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <select
+              value={brand}
+              onChange={(e) => {
+                setBrand(e.target.value);
+                setModel(""); // brand change resets the dependent model
+              }}
+              className="input"
+            >
+              <option value="">برند را انتخاب کنید *</option>
+              {facets.brands.map((b) => (
+                <option key={b.key} value={b.label}>
+                  {b.label} ({b.count.toLocaleString("fa-IR")})
+                </option>
+              ))}
+            </select>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={!selectedBrandFacet}
+              className="input"
+            >
+              <option value="">همهٔ مدل‌ها</option>
+              {(selectedBrandFacet?.models ?? []).slice(0, 60).map((m) => (
+                <option key={m.label} value={m.label}>
+                  {m.label} ({m.count.toLocaleString("fa-IR")})
+                </option>
+              ))}
+            </select>
+            <select value={year} onChange={(e) => setYear(e.target.value)} className="input">
+              <option value="">سال (اختیاری)</option>
+              {yearOptions.map((y) => (
+                <option key={y} value={String(y)}>
+                  {y.toLocaleString("fa-IR")}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              value={mileage}
+              onChange={(e) => setMileage(e.target.value)}
+              placeholder="کارکرد (km)"
+              className="input"
+            />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <input type="text" value={brand} onChange={(e) => setBrand(e.target.value)}
+              placeholder="برند * (پژو)" />
+            <input type="text" value={model} onChange={(e) => setModel(e.target.value)}
+              placeholder="مدل (206)" />
+            <input type="text" value={year} onChange={(e) => setYear(e.target.value)}
+              placeholder="سال (1398)" />
+            <input type="number" value={mileage} onChange={(e) => setMileage(e.target.value)}
+              placeholder="کارکرد (45000)" />
+          </div>
+        )}
+        <div className="mt-1">
+          <button
+            className="text-xs underline"
+            style={{ color: "var(--secondary)" }}
+            onClick={() => setGuided((g) => !g)}
+          >
+            {guided ? "تخصیص دستی (برای خودروهای نادر)" : "انتخاب از فهرست"}
+          </button>
         </div>
         <div className="mt-3 flex items-center justify-between gap-2">
           <label className="flex items-center gap-2 text-xs" style={{ color: "var(--muted)" }}>

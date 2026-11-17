@@ -58,6 +58,12 @@ class GroundedAnswer:
     citations: list[Evidence] = field(default_factory=list)
     evidence_count: int = 0
     candidates_after_filters: int = 0
+    # agentic metadata (GUI evolution 2026-11-17): consumed by the frontend
+    # to render listing cards + the methodology disclosure
+    mode: str = "simple"
+    listing_keys: list[str] = field(default_factory=list)
+    filters_used: dict = field(default_factory=dict)
+    steps: list = field(default_factory=list)
 
 
 def build_evidence(response: SearchResponse) -> list[Evidence]:

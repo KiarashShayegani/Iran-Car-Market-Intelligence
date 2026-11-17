@@ -17,11 +17,12 @@ export default function Home() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [latest, setLatest] = useState<Awaited<ReturnType<typeof fetchLatest>> | null>(null);
+  const [latestCount, setLatestCount] = useState(8);
   const [facets, setFacets] = useState<Awaited<ReturnType<typeof fetchFacets>> | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchLatest(8), fetchFacets()])
+    Promise.all([fetchLatest(latestCount), fetchFacets()])
       .then(([l, f]) => {
         setLatest(l);
         setFacets(f);
@@ -29,7 +30,7 @@ export default function Home() {
       .catch(() =>
         setApiError("سرور API در دسترس نیست — برای راه‌اندازی: scripts/run_api.py")
       );
-  }, []);
+  }, [latestCount]);
 
   const submit = (q: string) => {
     if (!q.trim()) return;
@@ -62,7 +63,7 @@ export default function Home() {
           </button>
         </div>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
-          {DEMO_QUERIES.slice(0, 3).map((dq) => (
+          {DEMO_QUERIES.slice(0, 5).map((dq) => (
             <button
               key={dq}
               onClick={() => submit(dq)}
@@ -94,6 +95,21 @@ export default function Home() {
         </section>
       )}
 
+      {/* quick access to the intelligence tools */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        {[
+          { href: "/estimate", title: "تخمین قیمت", desc: "قیمت منصفانه بر اساس آگهی‌های مشابه", icon: "💰" },
+          { href: "/compare", title: "مقایسه", desc: "کنار هم گذاشتن آگهی‌های انتخابی", icon: "⚖️" },
+          { href: "/ask", title: "پرسش هوشمند", desc: "پاسخ مبتنی بر شواهد واقعی بازار", icon: "🤖" },
+          { href: "/stats", title: "داشبورد", desc: "روند و تحلیل کل بازار", icon: "📊" },
+        ].map((c) => (
+          <button key={c.href} className="card card-hover p-3 text-right" onClick={() => router.push(c.href)}>
+            <p className="text-sm font-bold">{c.icon} {c.title}</p>
+            <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>{c.desc}</p>
+          </button>
+        ))}
+      </section>
+
       {/* brand discovery */}
       {facets && (
         <section>
@@ -116,13 +132,22 @@ export default function Home() {
       <section>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-semibold">تازه‌ترین آگهی‌های جمع‌آوری‌شده</h2>
-          <button
-            className="text-xs underline"
-            style={{ color: "var(--accent)" }}
-            onClick={() => router.push("/search")}
-          >
-            همهٔ نتایج →
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              className="text-xs underline"
+              style={{ color: "var(--accent)" }}
+              onClick={() => setLatestCount((c) => c + 8)}
+            >
+              نمایش بیشتر ↓
+            </button>
+            <button
+              className="text-xs underline"
+              style={{ color: "var(--accent)" }}
+              onClick={() => router.push("/search")}
+            >
+              همهٔ نتایج →
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {latest?.listings.map((card) => (

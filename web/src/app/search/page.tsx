@@ -128,7 +128,22 @@ function SearchContent() {
         </p>
       )}
 
-      {results?.results.length === 0 && (
+      {loading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="card overflow-hidden">
+              <div className="skeleton aspect-[4/3] w-full" />
+              <div className="p-3 space-y-2">
+                <div className="skeleton h-4 w-2/3" />
+                <div className="skeleton h-4 w-1/3" />
+                <div className="skeleton h-3 w-1/2" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && results?.results.length === 0 && (
         <div className="card p-8 text-center text-sm" style={{ color: "var(--muted)" }}>
           هیچ نتیجه‌ای یافت نشد — فیلترها سخت‌گیرانه‌اند و شل نمی‌شوند؛ پرسش یا
           فیلترها را تغییر دهید.

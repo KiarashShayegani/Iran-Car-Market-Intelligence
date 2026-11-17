@@ -16,6 +16,7 @@ export interface SearchResultItem {
   model_raw: string | null;
   trim_raw?: string | null;
   year_num: number | null;
+  year_raw: string | null;
   year_calendar: string | null;
   price_amount: number | null;
   mileage_km: number | null;
@@ -103,6 +104,10 @@ export interface AskApiResponse {
   model_id: string | null;
   evidence_count: number;
   candidates_after_filters: number;
+  mode: "agentic" | "simple";
+  listing_keys: string[];
+  filters_used: Record<string, unknown>;
+  steps: { step: string; [k: string]: unknown }[];
   citations: Citation[];
 }
 
@@ -250,12 +255,14 @@ export async function searchAds(
 export async function askQuestion(
   question: string,
   filters: FiltersState,
-  topK = 6
+  topK = 6,
+  mode: "agentic" | "simple" = "agentic"
 ): Promise<AskApiResponse> {
   const res = await fetch(`${API_BASE}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      mode,
       question,
       top_k: topK,
       ...filtersToBody(filters),
@@ -352,10 +359,48 @@ export function formatNumber(n: number | string | null): string {
 
 export function formatToman(amount: number | null): string {
   if (amount === null || amount === undefined) return "—";
-  const b = amount / 1_000_000_000;
-  if (b >= 0.1) return `${new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 2 }).format(b)} میلیارد تومان`;
+  const fa = new Intl.NumberFormat("fa-IR");
+  if (amount < 1_000_000) return `${fa.format(Math.round(amount / 100_000) / 10)} هزار تومان`;
   const m = amount / 1_000_000;
-  return `${new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 0 }).format(m)} میلیون تومان`;
+  if (m < 1000) {
+    // < ۱ میلیارد: always میلیون (never "0.6 میلیارد")
+    return `${fa.format(Math.round(m))} میلیون تومان`;
+  }
+  const b = amount / 1_000_000_000;
+  return `${new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 1 }).format(b)} میلیارد تومان`;
+}
+
+/**
+ * Year display policy (GUI evolution 2026-11-17):
+ * Jalali is the user-facing calendar. A Gregorian model year G is displayed
+ * as J = G - 621 (documented approximation — year-only values carry no month,
+ * so the conversion is the standard model-year convention). The original
+ * value stays available for the tooltip; raw DB fields are never modified.
+ */
+export function formatYear(
+  yearNum: number | null,
+  yearCalendar: string | null,
+  yearRaw: string | null
+): string {
+  if (yearNum === null || yearNum === undefined) return yearRaw ?? "—";
+  const fa = new Intl.NumberFormat("fa-IR");
+  if (yearCalendar === "gregorian") {
+    const j = yearNum - 621;
+    return `${fa.format(j)} <span class="year-orig">(میلادی ${fa.format(yearNum)})</span>`;
+  }
+  return fa.format(yearNum);
+}
+
+/** Plain-text variant (no HTML) for attributes/tooltips. */
+export function formatYearText(
+  yearNum: number | null,
+  yearCalendar: string | null,
+  yearRaw: string | null
+): string {
+  if (yearNum === null || yearNum === undefined) return yearRaw ?? "—";
+  const fa = new Intl.NumberFormat("fa-IR");
+  if (yearCalendar === "gregorian") return `${fa.format(yearNum - 621)} (میلادی ${fa.format(yearNum)})`;
+  return fa.format(yearNum);
 }
 
 
