@@ -120,11 +120,16 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
               className="input"
             >
               <option value="">همهٔ مدل‌ها</option>
-              {(selectedBrandFacet?.models ?? []).slice(0, 60).map((m) => (
-                <option key={m.label} value={m.label}>
-                  {m.label} ({m.count.toLocaleString("fa-IR")})
-                </option>
-              ))}
+              {(selectedBrandFacet?.models ?? []).slice(0, 60).map((m) => {
+                // model_raw often carries a year prefix ("1405 | پانوراما") —
+                // strip it for a clean dropdown label (the year has its own field)
+                const clean = m.label.replace(/^\d{2,4}\s*[|،,-]\s*/, "");
+                return (
+                  <option key={m.label} value={m.label}>
+                    {clean} ({m.count.toLocaleString("fa-IR")})
+                  </option>
+                );
+              })}
             </select>
             <select value={year} onChange={(e) => setYear(e.target.value)} className="input">
               <option value="">سال (اختیاری)</option>

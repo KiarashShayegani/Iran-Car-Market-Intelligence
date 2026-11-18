@@ -90,12 +90,14 @@ def estimate_market_range(
                 [],
             )
 
+    MIN_PLAUSIBLE_PRICE = 20_000_000  # below this, "prices" are parse
+    # artifacts (e.g. installment amounts) — never comparable evidence
     df = store.query_df(
-        """
+        f"""
         SELECT listing_key, source_platform, title, brand_raw, model_raw,
                year_num, year_calendar, mileage_km, price_amount, original_url
         FROM listings
-        WHERE price_amount IS NOT NULL AND price_amount > 0
+        WHERE price_amount IS NOT NULL AND price_amount >= {MIN_PLAUSIBLE_PRICE}
         """
     )
     df["brand_key"] = df["brand_raw"].map(lambda v: normalize_for_key(v) or None)
@@ -112,11 +114,24 @@ def estimate_market_range(
                 & (pool["year_num"] <= year_num + YEAR_TOLERANCE)
             ]
 
+    mileage_note: str | None = None
     if mileage_km is not None:
-        pool = pool[
-            pool["mileage_km"].notna()
-            & (pool["mileage_km"] <= mileage_km + MILEAGE_BAND_KM)
-        ]
+        # adaptive band: ±MILEAGE_BAND_KM first; widen symmetrically until the
+        # pool holds enough comparables (sparse combos must not show empty)
+        for band in (MILEAGE_BAND_KM, 60_000, 120_000):
+            candidate = pool[
+                pool["mileage_km"].notna()
+                & (pool["mileage_km"] >= mileage_km - band)
+                & (pool["mileage_km"] <= mileage_km + band)
+            ]
+            if len(candidate) >= 4 or band == 120_000:
+                pool = candidate
+                if band > MILEAGE_BAND_KM:
+                    mileage_note = (
+                        f"بازهٔ کارکرد برای رسیدن به نمونهٔ کافی تا ±{band // 1000} "
+                        "هزار کیلومتر گسترش داده شد."
+                    )
+                break
 
     def _int_or_none(value) -> int | None:
         if value is None:
@@ -192,6 +207,8 @@ def estimate_market_range(
         if quality == "ok"
         else f"نمونه کوچک ({count} آگهی) — این بازه تردید بالایی دارد."
     )
+    if mileage_note:
+        note += f" {mileage_note}"
 
     return EstimateResult(
         brand_key=brand_key,

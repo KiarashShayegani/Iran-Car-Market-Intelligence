@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import VehicleImage from "@/components/VehicleImage";
+import { GitCompare } from "lucide-react";
+import { getCompareKeys, toggleCompareKey } from "@/lib/api";
 import {
   CALENDAR_LABELS,
   PLATFORM_LABELS,
@@ -53,6 +55,7 @@ export default function ListingDetailPage() {
             </span>
           )}
         </div>
+        <CompareToggle listingKey={listing.listing_key} />
         {listing.original_url && (
           <a
             href={listing.original_url}
@@ -220,5 +223,42 @@ function Fact({
         {value ?? "—"}
       </p>
     </div>
+  );
+}
+
+
+function CompareToggle({ listingKey }: { listingKey: string }) {
+  const [inCompare, setInCompare] = useState(
+    getCompareKeys().includes(listingKey)
+  );
+  useEffect(() => {
+    const update = () => setInCompare(getCompareKeys().includes(listingKey));
+    window.addEventListener("icmi-compare-change", update);
+    return () => window.removeEventListener("icmi-compare-change", update);
+  }, [listingKey]);
+
+  return (
+    <button
+      onClick={() => {
+        toggleCompareKey(listingKey);
+        setInCompare(getCompareKeys().includes(listingKey));
+      }}
+      className={`flex items-center gap-1.5 !px-4 !py-2 !text-sm !rounded-[0.9rem] border ${
+        inCompare ? "!border-transparent" : "card-hover"
+      }`}
+      style={
+        inCompare
+          ? { background: "var(--teal-soft)", color: "var(--secondary)" }
+          : { background: "var(--card)", borderColor: "var(--border)" }
+      }
+      title={
+        inCompare
+          ? "حذف از مقایسه"
+          : "افزودن به مقایسه — حداقل دو آگهی برای مقایسه لازم است"
+      }
+    >
+      <GitCompare size={15} />
+      {inCompare ? "در مقایسه ✓" : "افزودن به مقایسه"}
+    </button>
   );
 }

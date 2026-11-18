@@ -3,10 +3,15 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import VehicleImage from "@/components/VehicleImage";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Bot, Loader2, Sparkles } from "lucide-react";
 import {
   CALENDAR_LABELS,
   CompareApiResponse,
   CompareVehicle,
+  EMPTY_FILTERS,
+  askQuestion,
   fetchCompare,
   formatNumber,
   formatToman,
@@ -27,6 +32,35 @@ function CompareContent() {
 
   const [data, setData] = useState<CompareApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const runAiAnalysis = async () => {
+    if (!data || data.vehicles.length < 2) return;
+    setAiLoading(true);
+    setAiError(null);
+    setAiAnalysis(null);
+    try {
+      const lines = data.vehicles.map((v, i) => {
+        const price = v.listing.price_amount !== null ? formatToman(v.listing.price_amount) : "توافقی";
+        const pos = pricePosition(v);
+        return `${i + 1}. ${v.listing.title ?? v.listing.listing_key} — قیمت: ${price}` +
+          `، سال: ${v.listing.year_num ?? "نامشخص"}` +
+          `، کارکرد: ${v.listing.mileage_km ?? "نامشخص"} کیلومتر` +
+          (pos ? `، وضعیت قیمت: ${pos.label}` : "");
+      });
+      const question =
+        "این آگهی‌های خودرو را از نظر ارزش خرید، تفاوت‌های مهم و وضعیت قیمت نسبت به بازار مقایسه کن و " +
+        "پیشنهاد مشخص بده:\n" + lines.join("\n");
+      const res = await askQuestion(question, EMPTY_FILTERS, 5, "simple");
+      setAiAnalysis(res.answer);
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "خطای ناشناخته");
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (keys.length < 2) {
@@ -206,6 +240,46 @@ function CompareContent() {
         محاسبه می‌شود و کاملاً قابل‌بررسی است — این یک برآورد آماری است، نه قیمت
         قطعی. مقادیر نامشخص صادقانه «—» نمایش داده می‌شوند.
       </p>
+
+      {/* AI-assisted analysis */}
+      <div className="card p-4">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <p className="text-sm font-bold flex items-center gap-1.5">
+            <Sparkles size={15} style={{ color: "var(--accent)" }} />
+            تحلیل هوشمند مقایسه
+          </p>
+          <button
+            className="btn !px-4 !py-2 !text-sm flex items-center gap-1.5"
+            onClick={runAiAnalysis}
+            disabled={aiLoading || data.vehicles.length < 2}
+          >
+            {aiLoading ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />}
+            {aiLoading ? "در حال تحلیل…" : "تحلیل با هوش مصنوعی"}
+          </button>
+        </div>
+        {aiError && (
+          <div className="p-3 rounded-lg text-xs" style={{ background: "#fef9c3", color: "#713f12" }}>
+            ⚠️ {aiError}
+          </div>
+        )}
+        {aiLoading && (
+          <div className="flex items-center gap-2 text-sm" style={{ color: "var(--muted)" }}>
+            <Loader2 size={15} className="animate-spin" />
+            در حال بررسی آگهی‌های انتخابی و نگارش تحلیل…
+          </div>
+        )}
+        {aiAnalysis && (
+          <div className="answer-text text-sm prose-sm">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiAnalysis}</ReactMarkdown>
+          </div>
+        )}
+        {!aiAnalysis && !aiLoading && !aiError && (
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            دستیار هوشمند، آگهی‌های انتخابی را از نظر ارزش خرید، تفاوت‌ها و وضعیت
+            قیمت تحلیل می‌کند — پاسخ فقط بر اساس همین آگهی‌ها ساخته می‌شود.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

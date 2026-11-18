@@ -8,6 +8,7 @@ import {
 import {
   PLATFORM_LABELS,
   fetchFacets,
+  formatDateJalaliShort,
   formatNumber,
   formatToman,
 } from "@/lib/api";
@@ -80,9 +81,14 @@ export default function AnalyticsPanel() {
   const kpi = data?.kpis ?? {};
   const trend = (data?.price_trend ?? []).map((r) => ({
     ...r,
+    dateJalali: formatDateJalaliShort(r.date),
     medianB: (r.median ?? 0) / 1e9,
     p25B: (r.p25 ?? 0) / 1e9,
     p75B: (r.p75 ?? 0) / 1e9,
+  }));
+  const mileage = (data?.by_mileage ?? []).map((r) => ({
+    ...r,
+    medianB: (r.median ?? 0) / 1e9,
   }));
   const years = (data?.by_year ?? [])
     .filter((r) => (r.calendar === "shamsi" ? r.year >= 1330 && r.year <= 1406 : r.year >= 1940 && r.year <= 2030))
@@ -199,7 +205,7 @@ export default function AnalyticsPanel() {
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={trend} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fontFamily: "Vazirmatn" }} />
+                  <XAxis dataKey="dateJalali" tick={{ fontSize: 11, fontFamily: "Vazirmatn" }} />
                   <YAxis tickFormatter={fmtAxisB} tick={{ fontSize: 11 }} width={70} />
                   <Tooltip
                     formatter={(v: unknown) => fmtB(Number(v) * 1e9)}
@@ -212,14 +218,16 @@ export default function AnalyticsPanel() {
               </ResponsiveContainer>
             )}
             <p className="mt-2 text-[11px]" style={{ color: "var(--muted)" }}>
-              سری‌زمانی بر اساس اجراهای جمع‌آوری است — آمار قیمت «آگهی» است، نه معاملهٔ واقعی.
+              هر نقطه = میانهٔ قیمت آگهی‌های دارای قیمت در «یک اجرای جمع‌آوری»
+              (دو بار در روز به‌صورت زمان‌بندی‌شده). آمار قیمت «آگهی» است، نه
+              معاملهٔ واقعی؛ با بیشتر شدن تاریخ داده، نقاط کامل‌تر می‌شوند.
             </p>
           </section>
 
           <section className="card p-4">
             <h3 className="mb-3 text-sm font-semibold">میانهٔ قیمت بر اساس کارکرد</h3>
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={data.by_mileage} margin={{ top: 4, right: 8, left: 8, bottom: 8 }}>
+              <BarChart data={mileage} margin={{ top: 4, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="bucket" tick={{ fontSize: 10, fontFamily: "Vazirmatn" }} />
                 <YAxis tickFormatter={fmtAxisB} tick={{ fontSize: 11 }} width={70} />

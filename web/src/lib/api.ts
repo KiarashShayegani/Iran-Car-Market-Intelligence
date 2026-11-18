@@ -365,6 +365,30 @@ export function formatNumber(n: number | string | null): string {
   return new Intl.NumberFormat("fa-IR").format(num);
 }
 
+/** Jalali date display (fa-IR Persian calendar, Persian digits) — the
+    user-facing date format across the app. */
+export function formatDateJalali(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(d);
+}
+
+/** Short Jalali (year/month/day numerals) for chart axes and chips. */
+export function formatDateJalaliShort(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+    month: "short",
+    day: "numeric",
+  }).format(d);
+}
+
 export function formatToman(amount: number | null): string {
   if (amount === null || amount === undefined) return "—";
   const fa = new Intl.NumberFormat("fa-IR");

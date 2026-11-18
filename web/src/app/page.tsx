@@ -1,36 +1,39 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { Search as SearchIcon } from "lucide-react";
-import VehicleImage from "@/components/VehicleImage";
+import DiscoveryResults from "@/components/DiscoveryResults";
 import {
   DEMO_QUERIES,
-  PLATFORM_LABELS,
   fetchFacets,
-  fetchLatest,
+  formatDateJalali,
   formatNumber,
-  formatToman,
 } from "@/lib/api";
 
 export default function Home() {
+  return (
+    <Suspense fallback={<div className="card p-6 text-sm">در حال بارگذاری…</div>}>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
   const router = useRouter();
-  const [query, setQuery] = useState("");
-  const [latest, setLatest] = useState<Awaited<ReturnType<typeof fetchLatest>> | null>(null);
-  const [latestCount, setLatestCount] = useState(8);
+  const searchParams = useSearchParams();
+  const activeQuery = searchParams.get("q") ?? "";
+  const [query, setQuery] = useState(activeQuery);
   const [facets, setFacets] = useState<Awaited<ReturnType<typeof fetchFacets>> | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchLatest(latestCount), fetchFacets()])
-      .then(([l, f]) => {
-        setLatest(l);
-        setFacets(f);
-      })
+    fetchFacets()
+      .then(setFacets)
       .catch(() =>
         setApiError("سرور API در دسترس نیست — برای راه‌اندازی: scripts/run_api.py")
       );
-  }, [latestCount]);
+  }, []);
 
   const submit = (q: string) => {
     if (!q.trim()) return;
@@ -89,26 +92,11 @@ export default function Home() {
           <FreshnessCard label="برندها" value={formatNumber(facets.brands.length)} />
           <FreshnessCard
             label="آخرین جمع‌آوری"
-            value={(facets.freshness.newest_collection ?? "—").slice(0, 10)}
+            value={formatDateJalali(facets.freshness.newest_collection)}
             small
           />
         </section>
       )}
-
-      {/* quick access to the intelligence tools */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-        {[
-          { href: "/estimate", title: "تخمین قیمت", desc: "قیمت منصفانه بر اساس آگهی‌های مشابه", icon: "💰" },
-          { href: "/compare", title: "مقایسه", desc: "کنار هم گذاشتن آگهی‌های انتخابی", icon: "⚖️" },
-          { href: "/ask", title: "پرسش هوشمند", desc: "پاسخ مبتنی بر شواهد واقعی بازار", icon: "🤖" },
-          { href: "/stats", title: "داشبورد", desc: "روند و تحلیل کل بازار", icon: "📊" },
-        ].map((c) => (
-          <button key={c.href} className="card card-hover p-3 text-right" onClick={() => router.push(c.href)}>
-            <p className="text-sm font-bold">{c.icon} {c.title}</p>
-            <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>{c.desc}</p>
-          </button>
-        ))}
-      </section>
 
       {/* brand discovery */}
       {facets && (
@@ -128,68 +116,10 @@ export default function Home() {
         </section>
       )}
 
-      {/* latest listings */}
-      <section>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">تازه‌ترین آگهی‌های جمع‌آوری‌شده</h2>
-          <div className="flex items-center gap-3">
-            <button
-              className="text-xs underline"
-              style={{ color: "var(--accent)" }}
-              onClick={() => setLatestCount((c) => c + 8)}
-            >
-              نمایش بیشتر ↓
-            </button>
-            <button
-              className="text-xs underline"
-              style={{ color: "var(--accent)" }}
-              onClick={() => router.push("/search")}
-            >
-              همهٔ نتایج →
-            </button>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {latest?.listings.map((card) => (
-            <button
-              key={card.listing_key}
-              onClick={() => {
-                const [platform, id] = card.listing_key.split(":");
-                router.push(`/listings/${platform}/${id}`);
-              }}
-              className="card card-hover overflow-hidden text-right"
-            >
-              <VehicleImage
-                src={card.image_url}
-                alt={card.title ?? card.listing_key}
-                className="aspect-[4/3] w-full"
-              />
-              <div className="p-3">
-                <p className="text-xs font-semibold truncate">
-                  {[card.brand_raw, card.model_raw, card.title]
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .join(" ") || "—"}
-                </p>
-                <p className="mt-1 text-xs num font-bold" style={{ color: "var(--accent)" }}>
-                  {card.price_amount !== null ? formatToman(card.price_amount) : "توافقی"}
-                </p>
-                <p className="mt-1 text-[11px] num" style={{ color: "var(--muted)" }}>
-                  سال {formatNumber(card.year_num)} · {formatNumber(card.mileage_km)} km
-                </p>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className={`chip platform-${card.source_platform}`}>
-                    {PLATFORM_LABELS[card.source_platform] ?? card.source_platform}
-                  </span>
-                  <span className="text-[10px]" style={{ color: "var(--muted)" }}>
-                    {card.first_seen_at?.slice(0, 10)}
-                  </span>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
+      {/* results — browse newest or semantic search, with filters + load-more */}
+      <Suspense fallback={<div className="card p-6 text-sm">در حال بارگذاری…</div>}>
+        <DiscoveryResults />
+      </Suspense>
     </div>
   );
 }
