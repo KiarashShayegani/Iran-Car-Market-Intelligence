@@ -10,6 +10,8 @@
 # at ~39.7K ads, exhausted at page ~1350). Steady-state budgets below catch
 # daily new-ad inflow (bama ~3-6K/day, sheypoor ~200/day — measured); the
 # duplicate-rate per run (manifests + ingest newness) is the tuning signal.
+# Divar added 2026-11-21 (EXPERIMENTAL, list-only): cadence 2x_daily, 30-page
+# sweeps — detail enrichment budgeted separately.
 # Budgets below are measurement-derived (2026-11-13, see
 # docs/internal/DATA_PIPELINE_AUDIT.md):
 #   - Sheypoor's unfiltered cursor feed ROTATES (0% overlap between runs
@@ -81,9 +83,13 @@ sources:
     presets: []
 
   divar:
-    enabled: false
-    cadence: manual
-    gated: browser-capture-investigation
+    enabled: true
+    cadence: 2x_daily
+    max_listings_per_run: 750     # list-only sweep (30 pages x ~24 ads)
+    max_pages_per_run: 30
+    max_requests_per_run: 35      # list sweeps; detail enrichment budgeted separately
+    gated: null
+    notes_short: experimental list-only sweeps — detail enrichment budgeted separately
 
   karnameh:
     enabled: false

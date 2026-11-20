@@ -20,11 +20,10 @@ def test_load_policy_validates():
 
 def test_disabled_sources_and_gates():
     policy = load_policy()
-    assert policy.sources["divar"].enabled is False
+    # divar is now EXPERIMENTAL-ENABLED (list-only sweeps; 2026-11-21)
+    assert policy.sources["divar"].enabled is True
     assert policy.sources["karnameh"].enabled is False
     # disabled takes precedence — a disabled source never runs regardless of gates
-    with pytest.raises(ValueError, match="disabled"):
-        policy.assert_can_collect("divar")
     with pytest.raises(ValueError, match="disabled"):
         policy.assert_can_collect("karnameh")
     # gated check: a hypothetical enabled-but-gated source
