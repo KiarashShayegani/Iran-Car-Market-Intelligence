@@ -1,0 +1,51 @@
+name: "Divar Cloud Probe (experimental — dispatch only)"
+
+# Owner-approved experiment: verify Divar API accessibility from GitHub
+# runners using the exact POST pattern decoded locally. Diagnostics-only —
+# NO corpus collection, NO changes to production schedules/policies.
+
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "Run notes (recorded in the diagnostics)"
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: divar-cloud-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync
+      - name: Divar POST + cursor + SSR probe
+        run: uv run python scripts/divar_cloud_probe.py
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: divar-probe-diagnostics
+          path: data/divar-probe/
+          retention-days: 7
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Divar cloud probe" >> $GITHUB_STEP_SUMMARY
+          if [ -f data/divar-probe/diagnostics.json ]; then
+            python3 -c "
+import json
+d = json.load(open('data/divar-probe/diagnostics.json'))
+print('verdict:', d.get('verdict'))
+for k in ('cold_start', 'continuation', 'ssr_page'):
+    print(f'  {k}:', json.dumps(d.get(k, {}), ensure_ascii=False)[:200])
+" >> $GITHUB_STEP_SUMMARY
+          fi

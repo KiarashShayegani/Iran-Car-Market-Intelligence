@@ -28,7 +28,12 @@ def normalize_price_amount(raw: int | float | str | None) -> int | None:
         return None
     if isinstance(raw, (int, float)):
         return int(raw) if raw == raw else None  # NaN guard for floats
-    text = str(raw).strip().translate(_DIGIT_TRANSLATION)
+    text = str(raw).strip()
+    # currency-word suffix (e.g. Divar's «۳,۲۳۰,۰۰۰,۰۰۰ تومان») — the digits
+    # are already the toman amount, so only the word is stripped (no scale change)
+    if text.endswith("تومان"):
+        text = text[: -len("تومان")].strip()
+    text = text.translate(_DIGIT_TRANSLATION)
     for separator in _THOUSANDS_SEPARATORS:
         text = text.replace(separator, "")
     if not text.isdigit():

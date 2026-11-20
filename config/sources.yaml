@@ -261,17 +261,42 @@ sources:
   divar:
     display_name: Divar
     display_name_fa: دیوار
-    enabled: false
-    status: deferred_blocked
+    enabled: true          # EXPERIMENTAL PROTOTYPE (2026-11-20) — not in the
+    # production schedule (the scheduled workflow has no divar job); local
+    # bounded runs only until the owner approves sustained collection.
+    status: experimental_pattern_decoded
     base_url: https://api.divar.ir/v8/postlist/w/search
+    pagination: {type: cursor_post, page_size: 24}
+    collections:
+      full:
+        description: >-
+          Tehran vehicles (category light), newest-first. Pattern decoded
+          2026-11-20 via browser capture: POST with form_data
+          {"category": {"str": {"value": "light"}}} + sort_date; cursor
+          pagination via pagination_data echo (verified 8 pages, 194 unique,
+          zero dupes). List rows are display-level — year/mileage live in
+          post SSR pages (divar.ir/v/<token>), detail enrichment is a
+          separate upstream step. api.divar.ir was 403 from GitHub runners
+          (GET probe) — local collection; cloud re-test pending.
+        params: {city_ids: ["1"], category: light, sort: sort_date}
+    field_support:
+      - source_listing_id
+      - title
+      - price_raw
+      - location_raw
+      - image_urls
+      - source_published_at
+      - description      # not supported at list level — detail enrichment upstream
     notes: >-
-      Time-boxed probe (2026-11-10, from owner's Iranian network): GET still
-      403, but POST is ACCEPTED (400 on payload shape — not IP-blocked).
-      Error reveals the contract: protobuf-JSON with Any-typed fields
-      ('Missing @type ... post_list.GetPostListRequest'). Cracking the exact
-      payload requires inspecting live web-client traffic (browser devtools
-      or JS bundle) — a future collector task, feasible but not trivial.
-      Status upgraded from deferred_blocked to feasible_unverified.
+      Pattern fully decoded 2026-11-20 (browser capture + probes; see
+      docs/internal/DIVAR_INVESTIGATION.md). POST body: city_ids +
+      form_data {"category"/"sort" str-wrapper objects}; pagination echoes
+      pagination.data verbatim. Structured per-post fields (numeric price,
+      brand/model, gearbox, fuel) live in the post SSR state
+      (divar.ir/v/<token>) — detail enrichment is a separate upstream step.
+      List rows carry price TEXT («۳,۲۳۰,۰۰۰,۰۰۰ تومان») — the price
+      normalizer now strips the تومان suffix. Collector: divar.py
+      (POST variant of the base loop, 403/429 stop + retry).
 
   karnameh:
     display_name: Karnameh

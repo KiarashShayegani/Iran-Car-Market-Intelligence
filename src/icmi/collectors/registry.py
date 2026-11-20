@@ -7,12 +7,14 @@ No source logic lives outside collectors/.
 from __future__ import annotations
 
 from icmi.collectors.bama import BamaCollector
+from icmi.collectors.divar import DivarCollector
 from icmi.collectors.base import BaseCollector
 from icmi.collectors.hamrah_mechanic import HamrahMechanicCollector
 from icmi.collectors.sheypoor import SheypoorCollector
 
 COLLECTORS: dict[str, type[BaseCollector]] = {
     BamaCollector.source_key: BamaCollector,
+    DivarCollector.source_key: DivarCollector,
     SheypoorCollector.source_key: SheypoorCollector,
     HamrahMechanicCollector.source_key: HamrahMechanicCollector,
 }
