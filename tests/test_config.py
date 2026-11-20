@@ -8,8 +8,11 @@ from icmi.core import config
 def test_load_default_sources_yaml():
     sources = config.load_sources()
     enabled = sources.enabled_sources()
-    assert set(enabled) == {"bama", "sheypoor", "hamrah_mechanic"}
-    assert sources.sources["divar"].enabled is False
+    # divar is enabled as an EXPERIMENTAL PROTOTYPE (2026-11-20) — local
+    # bounded runs only; NOT in the production schedule (no divar job in
+    # the scheduled workflow)
+    assert set(enabled) == {"bama", "sheypoor", "hamrah_mechanic", "divar"}
+    assert sources.sources["divar"].enabled is True
     assert sources.pipeline.extraction_version.startswith("icmi-v3")
 
 
