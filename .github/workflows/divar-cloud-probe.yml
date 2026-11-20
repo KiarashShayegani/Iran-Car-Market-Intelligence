@@ -41,11 +41,7 @@ jobs:
         run: |
           echo "## Divar cloud probe" >> $GITHUB_STEP_SUMMARY
           if [ -f data/divar-probe/diagnostics.json ]; then
-            python3 -c "
-import json
-d = json.load(open('data/divar-probe/diagnostics.json'))
-print('verdict:', d.get('verdict'))
-for k in ('cold_start', 'continuation', 'ssr_page'):
-    print(f'  {k}:', json.dumps(d.get(k, {}), ensure_ascii=False)[:200])
-" >> $GITHUB_STEP_SUMMARY
+            echo '\`\`\`json' >> $GITHUB_STEP_SUMMARY
+            cat data/divar-probe/diagnostics.json >> $GITHUB_STEP_SUMMARY
+            echo '\`\`\`' >> $GITHUB_STEP_SUMMARY
           fi
