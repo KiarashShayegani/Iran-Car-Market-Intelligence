@@ -59,6 +59,7 @@ function HomeContent() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit(query)}
             placeholder="مثلاً: ماشین اتوماتیک کم کارکرد خانوادگی"
+            style={{ color: "var(--foreground)", background: "#fff" }}
           />
           <button className="btn shrink-0 flex items-center gap-1.5" onClick={() => submit(query)}>
             <SearchIcon size={16} />

@@ -389,6 +389,23 @@ export function formatDateJalaliShort(iso: string | null | undefined): string {
   }).format(d);
 }
 
+export interface EstimateTaxonomy {
+  source: string;
+  brands: { brand: string; count: number; models: string[] }[];
+  trims: Record<string, string[]>;
+  years: number[];
+  body_conditions: string[];
+  body_types: string[];
+  transmissions: string[];
+  fuels: string[];
+}
+
+export async function fetchEstimateTaxonomy(): Promise<EstimateTaxonomy> {
+  const res = await fetch(`${API_BASE}/estimate/taxonomy`);
+  if (!res.ok) throw new Error(`خطای تاکسونومی (${res.status})`);
+  return res.json();
+}
+
 export function formatToman(amount: number | null): string {
   if (amount === null || amount === undefined) return "—";
   const fa = new Intl.NumberFormat("fa-IR");

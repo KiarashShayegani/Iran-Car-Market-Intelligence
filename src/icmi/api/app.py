@@ -457,6 +457,7 @@ def create_app(
         model: str | None = None,
         year: str | None = None,
         mileage_km: int | None = None,
+        source_platform: str | None = None,
         trim_outliers: bool = Query(default=False),
     ) -> dict:
         """Observed market range from comparable ads (retrieval-based, no ML)."""
@@ -466,11 +467,89 @@ def create_app(
             model=model,
             year=year,
             mileage_km=mileage_km,
+            source_platform=source_platform,
             trim_outliers=trim_outliers,
         )
         return {
             **result.__dict__,
             "comparables": [c.__dict__ for c in result.comparables],
+        }
+
+    @app.get("/estimate/taxonomy")
+    def estimate_taxonomy() -> dict:
+        """Bama-structured vehicle taxonomy for the guided estimate flow:
+        brand → model (extracted from titles) → trim variants + year range
+        + categorical option lists. Bama carries the most structured car
+        schema of the sources (100% field coverage), so the guided estimate
+        restricts selections to this taxonomy. Free-text fallback stays
+        available in the UI."""
+        store = get_store()
+        rows = store.query_df(
+            """
+            SELECT brand_canonical AS brand, title, model_raw AS trim,
+                   year_num, mileage_km, body_type_raw, body_condition_raw,
+                   transmission_raw, fuel_raw
+            FROM listings
+            WHERE source_platform = 'bama'
+            """
+        )
+
+        def model_of(title: str) -> str | None:
+            # bama titles: «برند، مدل | …» — the model is the second
+            # comma-separated token before the pipe
+            if not title or "،" not in title:
+                return None
+            tok = title.split("،")[1].split("|")[0].strip()
+            return tok or None
+
+        models: dict[str, dict] = {}
+        trims_by_model: dict[str, dict] = {}
+        years: set[int] = set()
+        body_conditions: set[str] = set()
+        body_types: set[str] = set()
+        transmissions: set[str] = set()
+        fuels: set[str] = set()
+        for _, r in rows.iterrows():
+            brand = r["brand"]
+            model = model_of(r["title"])
+            if model:
+                m = models.setdefault(brand, {})
+                m[model] = m.get(model, 0) + 1
+                trim = r["trim"]
+                if trim:
+                    trims_by_model.setdefault((brand, model), set()).add(trim)
+            if r["year_num"] and 1330 <= r["year_num"] <= 1406:
+                years.add(int(r["year_num"]))
+            for col, bag in (
+                ("body_condition_raw", body_conditions),
+                ("body_type_raw", body_types),
+                ("transmission_raw", transmissions),
+                ("fuel_raw", fuels),
+            ):
+                v = r[col]
+                if v:
+                    bag.add(str(v))
+
+        brand_list = [
+            {
+                "brand": b,
+                "count": sum(models[b].values()),
+                "models": sorted(models[b].keys()),
+            }
+            for b in sorted(models.keys(), key=lambda b: -sum(models[b].values()))
+        ]
+        return {
+            "source": "bama",
+            "brands": brand_list,
+            "trims": {
+                f"{b}||{m}": sorted(t)
+                for (b, m), t in trims_by_model.items()
+            },
+            "years": sorted(years, reverse=True),
+            "body_conditions": sorted(body_conditions),
+            "body_types": sorted(body_types),
+            "transmissions": sorted(transmissions),
+            "fuels": sorted(fuels),
         }
 
     @app.get("/listings/{platform}/{listing_id}")

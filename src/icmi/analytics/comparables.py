@@ -67,10 +67,13 @@ def estimate_market_range(
     mileage_km: int | None = None,
     max_comparables: int = 8,
     trim_outliers: bool = False,
+    source_platform: str | None = None,
 ) -> EstimateResult:
     """Estimate the observed market range for a vehicle description.
 
     All criteria are AND-ed; with no model given, the whole brand is the pool.
+    `source_platform` restricts the comparable pool to one source (the
+    Bama-structured estimate uses source_platform="bama").
     """
     brand_key = normalize_for_key(brand)
     if not brand_key:
@@ -101,6 +104,8 @@ def estimate_market_range(
         """
     )
     df["brand_key"] = df["brand_raw"].map(lambda v: normalize_for_key(v) or None)
+    if source_platform:
+        df = df[df["source_platform"] == source_platform]
     pool = df[df["brand_key"] == brand_key]
     if model_key:
         pool = pool[pool["model_raw"].map(lambda v: normalize_for_key(v)) == model_key]

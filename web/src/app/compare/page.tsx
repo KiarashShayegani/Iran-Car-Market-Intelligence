@@ -3,8 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import VehicleImage from "@/components/VehicleImage";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import AiMarkdown from "@/components/AiMarkdown";
 import { Bot, Loader2, Sparkles } from "lucide-react";
 import {
   CALENDAR_LABELS,
@@ -269,8 +268,8 @@ function CompareContent() {
           </div>
         )}
         {aiAnalysis && (
-          <div className="answer-text text-sm prose-sm">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiAnalysis}</ReactMarkdown>
+          <div className="text-sm">
+            <AiMarkdown content={aiAnalysis} />
           </div>
         )}
         {!aiAnalysis && !aiLoading && !aiError && (

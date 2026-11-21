@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   CheckCircle2, ExternalLink, Loader2, MessageSquareText, PenLine,
   Search as SearchIcon, Sparkles, User,
 } from "lucide-react";
+import AiMarkdown from "@/components/AiMarkdown";
 import VehicleImage from "@/components/VehicleImage";
 import PlatformMark from "@/components/PlatformMark";
 import {
@@ -233,8 +232,8 @@ export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: Filter
                       </div>
                     )}
 
-                    <div className="card p-4 answer-text text-sm prose-sm">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer.answer}</ReactMarkdown>
+                    <div className="card p-4 answer-text text-sm">
+                      <AiMarkdown content={answer.answer} />
                     </div>
 
                     {answer.citations.length > 0 && (

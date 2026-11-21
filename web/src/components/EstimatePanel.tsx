@@ -1,17 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import AiMarkdown from "@/components/AiMarkdown";
+import { Bot, Loader2, Sparkles } from "lucide-react";
 import {
   API_BASE,
   CALENDAR_LABELS,
-  FacetsApiResponse,
+  EMPTY_FILTERS,
   ListingDetail,
+  askQuestion,
   PLATFORM_LABELS,
-  fetchFacets,
+  fetchEstimateTaxonomy,
   formatNumber,
   formatToman,
 } from "@/lib/api";
-import { useEffect } from "react";
+import PlatformMark from "@/components/PlatformMark";
 
 interface EstimateResponse {
   brand_key: string;
@@ -40,31 +43,68 @@ interface EstimateResponse {
   }[];
 }
 
+interface EstimateTaxonomy {
+  source: string;
+  brands: { brand: string; count: number; models: string[] }[];
+  trims: Record<string, string[]>;
+  years: number[];
+  body_conditions: string[];
+  body_types: string[];
+  transmissions: string[];
+  fuels: string[];
+}
+
 export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: string) => void }) {
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
+  const [trim, setTrim] = useState("");
   const [year, setYear] = useState("");
   const [mileage, setMileage] = useState("");
+  const [bodyCondition, setBodyCondition] = useState("");
   const [trimOutliers, setTrimOutliers] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<EstimateResponse | null>(null);
   const [detail, setDetail] = useState<ListingDetail | null>(null);
-  const [facets, setFacets] = useState<FacetsApiResponse | null>(null);
+  const [taxonomy, setTaxonomy] = useState<EstimateTaxonomy | null>(null);
   const [guided, setGuided] = useState(true);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchFacets().then(setFacets).catch(() => {});
+    fetchEstimateTaxonomy().then(setTaxonomy).catch(() => {});
   }, []);
 
-  const selectedBrandFacet = facets?.brands.find((b) => b.label === brand) ?? null;
-  const yearOptions: number[] = [];
-  if (facets?.bounds.min_year && facets?.bounds.max_year) {
-    // plausible Jalali window only (display policy: years are shown Jalali)
-    const lo = Math.max(1360, Math.min(facets.bounds.min_year, 1400) - 0);
-    const hi = Math.min(1406, facets.bounds.max_year);
-    for (let y = hi; y >= lo; y--) yearOptions.push(y);
-  }
+  const selectedBrandTax = taxonomy?.brands.find((b) => b.brand === brand) ?? null;
+  const trimOptions = taxonomy?.trims?.[`${brand}||${model}`] ?? [];
+  const yearOptions = taxonomy?.years ?? [];
+
+  const explainEstimate = async () => {
+    if (!result || result.count === 0) return;
+    setAiLoading(true);
+    setAiError(null);
+    setAiAnalysis(null);
+    try {
+      const veh = [brand, model, trim].filter(Boolean).join(" ") || brand;
+      const parts = [
+        `کاربر دربارهٔ ارزش بازار این خودرو می‌پرسد: ${veh}` +
+          (year ? `، سال ${year}` : "") +
+          (mileage ? `، کارکرد ${mileage} کیلومتر` : "") + ".",
+        `برآورد آماری خودروبان (بر پایهٔ آگهی‌های باما): میانه ${formatToman(result.median)}` +
+          `، بازهٔ ${formatToman(result.p25)} تا ${formatToman(result.p75)}` +
+          ` بر پایهٔ ${result.count} آگهی مشابه.`,
+        "آگهی‌های مشابه بازیابی‌شده در شواهد آمده‌اند — تحلیل کن: چرا این بازه؟" +
+          " تفاوت‌های مهم نمونه‌ها؟ و به کاربر چه نکته‌ای را بدهی؟",
+      ];
+      const res = await askQuestion(parts.join(" "), EMPTY_FILTERS, 8, "simple");
+      setAiAnalysis(res.answer);
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "خطای ناشناخته");
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const submit = async () => {
     if (!brand.trim()) return;
@@ -72,8 +112,9 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
     setError(null);
     setResult(null);
     setDetail(null);
+    setAiAnalysis(null);
     try {
-      const p = new URLSearchParams({ brand: brand.trim() });
+      const p = new URLSearchParams({ brand: brand.trim(), source_platform: "bama" });
       if (model.trim()) p.set("model", model.trim());
       if (year.trim()) p.set("year", year.trim());
       if (mileage.trim()) p.set("mileage_km", mileage.trim());
@@ -92,44 +133,50 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
     <div className="space-y-4">
       <div className="card p-4">
         <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
-          تخمین بر پایه قیمت‌های واقعی آگهی‌های مشابه در داده‌های فعلی — بدون
-          مدل یادگیری، بدون حدس؛ هر تخمین همراه با نمونه‌های قابل‌بررسی ارائه
-          می‌شود.
+          تخمین بر پایهٔ ساختارمندترین دادهٔ بازار — آگهی‌های باما (برند، مدل،
+          تیپ، سال، کارکرد و وضعیت بدنهٔ ساختاریافته) — بدون مدل یادگیری و
+          بدون حدس؛ هر تخمین همراه با نمونه‌های قابل‌بررسی ارائه می‌شود.
         </p>
-        {guided && facets ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {guided && taxonomy ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <select
               value={brand}
               onChange={(e) => {
                 setBrand(e.target.value);
-                setModel(""); // brand change resets the dependent model
+                setModel("");
+                setTrim("");
               }}
               className="input"
             >
               <option value="">برند را انتخاب کنید *</option>
-              {facets.brands.map((b) => (
-                <option key={b.key} value={b.label}>
-                  {b.label} ({b.count.toLocaleString("fa-IR")})
+              {(taxonomy.brands ?? []).map((b) => (
+                <option key={b.brand} value={b.brand}>
+                  {b.brand} ({b.count.toLocaleString("fa-IR")})
                 </option>
               ))}
             </select>
             <select
               value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={!selectedBrandFacet}
+              onChange={(e) => {
+                setModel(e.target.value);
+                setTrim("");
+              }}
+              disabled={!selectedBrandTax}
               className="input"
             >
               <option value="">همهٔ مدل‌ها</option>
-              {(selectedBrandFacet?.models ?? []).slice(0, 60).map((m) => {
-                // model_raw often carries a year prefix ("1405 | پانوراما") —
-                // strip it for a clean dropdown label (the year has its own field)
-                const clean = m.label.replace(/^\d{2,4}\s*[|،,-]\s*/, "");
-                return (
-                  <option key={m.label} value={m.label}>
-                    {clean} ({m.count.toLocaleString("fa-IR")})
-                  </option>
-                );
-              })}
+              {(selectedBrandTax?.models ?? []).map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <select
+              value={trim}
+              onChange={(e) => setTrim(e.target.value)}
+              disabled={trimOptions.length === 0}
+              className="input"
+            >
+              <option value="">همهٔ تیپ‌ها</option>
+              {trimOptions.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
             <select value={year} onChange={(e) => setYear(e.target.value)} className="input">
               <option value="">سال (اختیاری)</option>
@@ -143,9 +190,19 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
               type="number"
               value={mileage}
               onChange={(e) => setMileage(e.target.value)}
-              placeholder="کارکرد (km)"
+              placeholder="کارکرد (کیلومتر)"
               className="input"
             />
+            <select
+              value={bodyCondition}
+              onChange={(e) => setBodyCondition(e.target.value)}
+              className="input"
+            >
+              <option value="">وضعیت بدنه (اختیاری)</option>
+              {(taxonomy.body_conditions ?? []).map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -165,7 +222,7 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
             style={{ color: "var(--secondary)" }}
             onClick={() => setGuided((g) => !g)}
           >
-            {guided ? "تخصیص دستی (برای خودروهای نادر)" : "انتخاب از فهرست"}
+            {guided ? "ورود دستی مشخصات (برای خودروهای نادر)" : "انتخاب از فهرست باما"}
           </button>
         </div>
         <div className="mt-3 flex items-center justify-between gap-2">
@@ -183,9 +240,9 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
           </button>
         </div>
         <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
-          معیار انتخاب مشابه‌ها: همان برند (+مدل اگر وارد شود)، سال در بازهٔ ±۲
-          از تقویم واحد، کارکرد در بازهٔ ±۳۰هزار کیلومتر — همه از دادهٔ واقعی
-          آگهی‌ها.
+          معیار انتخاب مشابه‌ها: آگهی‌های باما با همان برند (+مدل/تیپ اگر وارد
+          شود)، سال در بازهٔ ±۲، کارکرد در بازهٔ ±۳۰هزار کیلومتر (در صورت نیاز
+          به‌صورت هوشمند گسترش می‌یابد) — همه از دادهٔ واقعی آگهی‌ها.
         </p>
       </div>
 
@@ -206,12 +263,42 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
                   {result.quality === "ok" ? "نمونهٔ کافی" : "نمونهٔ کم"}
                 </span>
                 <span className="text-xs" style={{ color: "var(--muted)" }}>
-                  {result.count} آگهی مشابه
+                  {result.count} آگهی مشابه باما
                   {result.year_num !== null &&
                     ` · سال ${formatNumber(result.year_num)} (${
                       CALENDAR_LABELS[result.year_calendar ?? ""] ?? result.year_calendar
                     })`}
                 </span>
+              </div>
+
+              {/* AI explanation of the valuation */}
+              <div className="mb-4 rounded-xl p-3" style={{ background: "var(--teal-soft)" }}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: "var(--secondary)" }}>
+                    <Sparkles size={13} /> تحلیل هوشمند این برآورد
+                  </p>
+                  <button
+                    className="btn !px-3 !py-1.5 !text-xs flex items-center gap-1.5"
+                    onClick={explainEstimate}
+                    disabled={aiLoading}
+                  >
+                    {aiLoading ? <Loader2 size={13} className="animate-spin" /> : <Bot size={13} />}
+                    {aiLoading ? "در حال تحلیل…" : "تحلیل کن"}
+                  </button>
+                </div>
+                {aiError && (
+                  <p className="mt-2 text-xs" style={{ color: "var(--danger)" }}>⚠️ {aiError}</p>
+                )}
+                {aiAnalysis && (
+                  <div className="mt-2 text-sm">
+                    <AiMarkdown content={aiAnalysis} />
+                  </div>
+                )}
+                {!aiAnalysis && !aiLoading && !aiError && (
+                  <p className="mt-1 text-[11px]" style={{ color: "var(--muted)" }}>
+                    دستیار هوشمند، دلیل این بازه را بر اساس آگهی‌های مشابه توضیح می‌دهد.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-center">
