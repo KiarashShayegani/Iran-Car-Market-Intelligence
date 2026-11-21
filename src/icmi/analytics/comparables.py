@@ -108,7 +108,13 @@ def estimate_market_range(
         df = df[df["source_platform"] == source_platform]
     pool = df[df["brand_key"] == brand_key]
     if model_key:
-        pool = pool[pool["model_raw"].map(lambda v: normalize_for_key(v)) == model_key]
+        # contains-match on the normalized TITLE: bama's model_raw is a
+        # trim/variant description (year-prefixed) — the model name lives in
+        # the title («پژو، 206 | …»). Contains semantics also cover free-text
+        # model references from the agentic/guided flows.
+        pool = pool[pool["title"].map(
+            lambda v: bool(v) and model_key in normalize_for_key(str(v))
+        )]
 
     if calendar:
         pool = pool[pool["year_calendar"] == calendar]
