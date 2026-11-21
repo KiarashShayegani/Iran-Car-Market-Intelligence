@@ -68,9 +68,6 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
   const [detail, setDetail] = useState<ListingDetail | null>(null);
   const [taxonomy, setTaxonomy] = useState<EstimateTaxonomy | null>(null);
   const [guided, setGuided] = useState(true);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
-  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchEstimateTaxonomy().then(setTaxonomy).catch(() => {});
@@ -80,39 +77,12 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
   const trimOptions = taxonomy?.trims?.[`${brand}||${model}`] ?? [];
   const yearOptions = taxonomy?.years ?? [];
 
-  const explainEstimate = async () => {
-    if (!result || result.count === 0) return;
-    setAiLoading(true);
-    setAiError(null);
-    setAiAnalysis(null);
-    try {
-      const veh = [brand, model, trim].filter(Boolean).join(" ") || brand;
-      const parts = [
-        `کاربر دربارهٔ ارزش بازار این خودرو می‌پرسد: ${veh}` +
-          (year ? `، سال ${year}` : "") +
-          (mileage ? `، کارکرد ${mileage} کیلومتر` : "") + ".",
-        `برآورد آماری خودروبان (بر پایهٔ آگهی‌های باما): میانه ${formatToman(result.median)}` +
-          `، بازهٔ ${formatToman(result.p25)} تا ${formatToman(result.p75)}` +
-          ` بر پایهٔ ${result.count} آگهی مشابه.`,
-        "آگهی‌های مشابه بازیابی‌شده در شواهد آمده‌اند — تحلیل کن: چرا این بازه؟" +
-          " تفاوت‌های مهم نمونه‌ها؟ و به کاربر چه نکته‌ای را بدهی؟",
-      ];
-      const res = await askQuestion(parts.join(" "), EMPTY_FILTERS, 8, "simple");
-      setAiAnalysis(res.answer);
-    } catch (e) {
-      setAiError(e instanceof Error ? e.message : "خطای ناشناخته");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
   const submit = async () => {
     if (!brand.trim()) return;
     setLoading(true);
     setError(null);
     setResult(null);
     setDetail(null);
-    setAiAnalysis(null);
     try {
       const p = new URLSearchParams({ brand: brand.trim(), source_platform: "bama" });
       if (model.trim()) p.set("model", model.trim());
@@ -269,36 +239,6 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
                       CALENDAR_LABELS[result.year_calendar ?? ""] ?? result.year_calendar
                     })`}
                 </span>
-              </div>
-
-              {/* AI explanation of the valuation */}
-              <div className="mb-4 rounded-xl p-3" style={{ background: "var(--teal-soft)" }}>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: "var(--secondary)" }}>
-                    <Sparkles size={13} /> تحلیل هوشمند این برآورد
-                  </p>
-                  <button
-                    className="btn !px-3 !py-1.5 !text-xs flex items-center gap-1.5"
-                    onClick={explainEstimate}
-                    disabled={aiLoading}
-                  >
-                    {aiLoading ? <Loader2 size={13} className="animate-spin" /> : <Bot size={13} />}
-                    {aiLoading ? "در حال تحلیل…" : "تحلیل کن"}
-                  </button>
-                </div>
-                {aiError && (
-                  <p className="mt-2 text-xs" style={{ color: "var(--danger)" }}>⚠️ {aiError}</p>
-                )}
-                {aiAnalysis && (
-                  <div className="mt-2 text-sm">
-                    <AiMarkdown content={aiAnalysis} />
-                  </div>
-                )}
-                {!aiAnalysis && !aiLoading && !aiError && (
-                  <p className="mt-1 text-[11px]" style={{ color: "var(--muted)" }}>
-                    دستیار هوشمند، دلیل این بازه را بر اساس آگهی‌های مشابه توضیح می‌دهد.
-                  </p>
-                )}
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-center">
