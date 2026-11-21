@@ -29,13 +29,13 @@ import json
 import re
 from dataclasses import dataclass, field
 
-from icmi.qa.grounded import CURATION_DIRECTIVE
-from icmi.retrieval.normalization import normalize_for_key
 from icmi.qa.grounded import (
+    CURATION_DIRECTIVE,
     INSUFFICIENT_MARKER,
     GroundedAnswer,
     LLMError,
 )
+from icmi.retrieval.normalization import normalize_for_key
 from icmi.retrieval.search import SearchFilters, SearchResponse, SearchService
 
 MAX_SEARCH_CALLS = 2

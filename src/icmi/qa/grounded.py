@@ -83,7 +83,7 @@ class GroundedAnswer:
 
 
 def build_evidence(
-    response: SearchResponse, metadata: "pd.DataFrame | None" = None
+    response: SearchResponse, metadata: pd.DataFrame | None = None
 ) -> list[Evidence]:
     """Build evidence; when the service metadata frame is supplied, enrich
     each item with the card fields (image, price, year, mileage, ...)."""
