@@ -103,7 +103,7 @@ def incremental_index_build(
             encoded = np.asarray(
                 encoder.encode_passages([c.normalized_text for c in sl])
             )
-            for chunk, vec in zip(sl, encoded):
+            for chunk, vec in zip(sl, encoded, strict=False):
                 vectors_rows.append(vec)
                 meta_rows.append(chunk)
             newly_encoded += len(sl)

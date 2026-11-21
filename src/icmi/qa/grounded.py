@@ -116,20 +116,20 @@ def build_evidence(
             except ValueError:
                 pass
 
-        def scalar(col: str):
+        def scalar(row, col: str):
             v = row.get(col)
             return None if v is None or pd.isna(v) else v
 
-        price = scalar("price_amount")
+        price = scalar(row, "price_amount")
         ev.price_amount = int(price) if price is not None else None
-        year = scalar("year_num")
+        year = scalar(row, "year_num")
         ev.year_num = int(year) if year is not None else None
-        ev.year_calendar = scalar("year_calendar")
-        mileage = scalar("mileage_km")
+        ev.year_calendar = scalar(row, "year_calendar")
+        mileage = scalar(row, "mileage_km")
         ev.mileage_km = int(mileage) if mileage is not None else None
-        ev.location_raw = scalar("location_raw")
-        ev.brand_raw = scalar("brand_raw")
-        ev.model_raw = scalar("model_raw")
+        ev.location_raw = scalar(row, "location_raw")
+        ev.brand_raw = scalar(row, "brand_raw")
+        ev.model_raw = scalar(row, "model_raw")
     return evidence
 
 
