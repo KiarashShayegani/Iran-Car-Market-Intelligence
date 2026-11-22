@@ -1,0 +1,72 @@
+# Query entity map — Latin and transliterated model references that must
+# steer search deterministically (the embedding model confuses short entity
+# queries: "AMG" ranks ام جی (MG) ads first, "G class" matches شاهین تیپ G).
+#
+# Keys: normalize_for_key of the query token/pair (lowercased Latin, Persian
+# without spaces). Values: brand (canonical Persian label) and optional model
+# label as it appears in bama titles. Curated and reviewable — the corpus
+# vocabulary (build_model_vocab) covers the Persian model names automatically.
+entities:
+  amg: {brand: بنز}
+  mercedes: {brand: بنز}
+  mercedesbenz: {brand: بنز}
+  benz: {brand: بنز}
+  gclass: {brand: بنز, model: کلاس G}
+  جیکلاس: {brand: بنز, model: کلاس G}
+  بنزg: {brand: بنز, model: کلاس G}
+  g63: {brand: بنز, model: کلاس G}
+  g55: {brand: بنز, model: کلاس G}
+  g500: {brand: بنز, model: کلاس G}
+  گولف: {brand: فولکس, model: گلف}
+  golf: {brand: فولکس, model: گلف}
+  gle: {brand: بنز, model: کلاس GLE}
+  glc: {brand: بنز, model: کلاس GLC}
+  gls: {brand: بنز, model: کلاس GLS}
+  gla: {brand: بنز, model: کلاس GLA}
+  glb: {brand: بنز, model: کلاس GLB}
+  cla: {brand: بنز, model: کلاس CLA}
+  cls: {brand: بنز, model: کلاس CLS}
+  slk: {brand: بنز, model: کلاس SLK}
+  eqe: {brand: بنز}
+  eqb: {brand: بنز, model: کلاس EQB}
+  eqa: {brand: بنز, model: کلاس EQA}
+  c200: {brand: بنز, model: کلاس C}
+  e200: {brand: بنز, model: کلاس E}
+  e300: {brand: بنز, model: کلاس E}
+  s500: {brand: بنز, model: کلاس S}
+  s600: {brand: بنز, model: کلاس S}
+  x5: {brand: ب ام و}
+  x6: {brand: ب ام و}
+  x3: {brand: ب ام و}
+  x1: {brand: ب ام و}
+  m5: {brand: ب ام و}
+  mg5: {brand: ام جی}
+  mg6: {brand: ام جی}
+  rx5: {brand: ام جی}
+  gt: {brand: ام جی}
+  tu5: {brand: پژو}
+  tu5p: {brand: پژو}
+  cruze: {brand: شورولت, model: کروز}
+  camry: {brand: تویوتا, model: کامری}
+  corolla: {brand: تویوتا, model: کورولا}
+  rav4: {brand: تویوتا, model: راو4}
+  landcruiser: {brand: تویوتا, model: لندکروز}
+  prado: {brand: تویوتا, model: پرادو}
+  hilux: {brand: تویوتا, model: هایلوکس}
+  civic: {brand: هوندا, model: سیویک}
+  sonata: {brand: هیوندای, model: سوناتا}
+  elantra: {brand: هیوندای, model: آوانته}
+  tucson: {brand: هیوندای, model: توسان}
+  santa: {brand: هیوندای, model: سانتابه}
+  sportage: {brand: کیا, model: اسپورتیج}
+  cerato: {brand: کیا, model: سراتو}
+  rio: {brand: کیا, model: ریو}
+  picanto: {brand: کیا, model: پیکانتو}
+  optima: {brand: کیا, model: اپتیما}
+  megane: {brand: رنو, model: مگان}
+  sandero: {brand: رنو, model: ساندرا}
+  logan: {brand: رنو, model: لوگان}
+  talisman: {brand: رنو, model: تلیسمان}
+  koleos: {brand: رنو, model: کولیوس}
+  l90: {brand: رنو, model: ال 90}
+  duster: {brand: رنو, model: دوستو}

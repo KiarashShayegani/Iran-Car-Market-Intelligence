@@ -23,6 +23,8 @@ from icmi.analytics.stats import market_stats
 from icmi.api.image_proxy import CachedImage, ImageCache, ImageProxyError
 from icmi.core.config import load_sources
 from icmi.core.paths import index_dir
+from icmi.core.taxonomy import build_bama_taxonomy, build_model_vocab
+from icmi.core.value_aliases import canonical_facet_values, variants_of
 from icmi.pipeline.normalize import normalize_year
 from icmi.pipeline.store import CanonicalStore
 from icmi.qa.agentic import answer_agentic
@@ -120,10 +122,44 @@ def create_app(
                     status_code=503,
                     detail="Index format outdated — rebuild with scripts/build_index.py",
                 )
+            store = get_store()
             state["search_service"] = SearchService(
-                vectors, metadata, get_encoder(DEFAULT_MODEL_ID)
+                vectors,
+                metadata,
+                get_encoder(DEFAULT_MODEL_ID),
+                entity_vocab=_entity_vocab(store),
+                brand_canonicals=_brand_canonicals(store),
             )
         return state["search_service"]
+
+    _entity_cache: dict[str, Any] = {"key": None, "vocab": {}, "brands": set()}
+
+    def _entity_signature(store: CanonicalStore) -> tuple:
+        row = store.query_df(
+            "SELECT COUNT(*) AS n, COALESCE(MAX(updated_at), '') AS t FROM listings"
+        ).iloc[0]
+        return (int(row["n"]), str(row["t"]))
+
+    def _entity_vocab(store: CanonicalStore) -> dict:
+        """Corpus-derived model vocabulary for query entity steering, cached
+        until the listings table changes (read-time derivation: future data
+        is picked up automatically, no backfill)."""
+        key = _entity_signature(store)
+        if _entity_cache["key"] != key:
+            _entity_cache["key"] = key
+            _entity_cache["vocab"] = build_model_vocab(store)
+            _entity_cache["brands"] = {
+                str(v)
+                for v in store.query_df(
+                    "SELECT DISTINCT brand_canonical AS v FROM listings "
+                    "WHERE brand_canonical IS NOT NULL"
+                )["v"]
+            }
+        return _entity_cache["vocab"]
+
+    def _brand_canonicals(store: CanonicalStore) -> set:
+        _entity_vocab(store)  # refresh cache alongside the vocabulary
+        return _entity_cache["brands"]
 
     def get_qa_client():
         # resolve lazily so .env changes apply without restart in dev
@@ -163,23 +199,62 @@ def create_app(
 
     @app.get("/latest")
     def latest(limit: int = Query(default=12, ge=1, le=50)) -> dict:
-        """Most recently collected listings — homepage inventory surface."""
+        """Most recently collected listings — homepage inventory surface.
+
+        Brand-diverse: at most 2 ads per brand surface first. Collection
+        sweeps are brand-rotated and flood recency with one model (a single
+        sweep can add 400+ same-brand rows), so the pool spans several sweeps
+        and rows without a brand group by their title's first token (divar
+        rows carry no structured brand — the title still names the car)."""
+        pool_size = max(limit * 24, 2000)
         df = get_store().query_df(
             """
             SELECT listing_key, source_platform, original_url, title, brand_raw,
-                   model_raw, price_amount, year_num, year_calendar, mileage_km,
-                   location_raw, image_urls_json, first_seen_at
+                   brand_key, model_raw, price_amount, year_num, year_calendar,
+                   mileage_km, location_raw, image_urls_json, first_seen_at
             FROM listings ORDER BY first_seen_at DESC, listing_key LIMIT ?
             """,
-            (limit,),
+            (pool_size,),
         )
-        return {"listings": [_listing_card(row) for _, row in df.iterrows()]}
+
+        def diversity_key(row) -> str:
+            if row["brand_key"]:
+                return str(row["brand_key"])
+            title = str(row["title"] or "").strip()
+            if title:
+                first = title.split("،")[0].strip()
+                return first[:24] or title[:24]
+            return str(row["listing_key"])
+
+        counts: dict = {}
+        picked: list = []
+        seen: set = set()
+        for _, row in df.iterrows():
+            key = diversity_key(row)
+            if counts.get(key, 0) < 2:
+                counts[key] = counts.get(key, 0) + 1
+                picked.append(row)
+                seen.add(row["listing_key"])
+            if len(picked) >= limit:
+                break
+        if len(picked) < limit:  # extreme edge: fewer candidates than limit
+            for _, row in df.iterrows():
+                if row["listing_key"] not in seen:
+                    picked.append(row)
+                    seen.add(row["listing_key"])
+                if len(picked) >= limit:
+                    break
+        return {"listings": [_listing_card(row) for row in picked]}
 
     @app.get("/facets")
     def facets() -> dict:
         """Database-driven filter facets: brands with nested models, spec
         values, top locations, platform counts, freshness. Never invents
-        options that are not present in the data."""
+        options that are not present in the data. Spec values are rolled up
+        into canonical groups («اتومات»+«اتوماتیک» → «اتوماتیک») so the
+        dropdowns show one honest option per concept; models use the
+        title-extracted model label (bama) instead of the trim-like
+        model_raw."""
         store = get_store()
         brands = store.query_df(
             """
@@ -188,27 +263,54 @@ def create_app(
             GROUP BY brand_key ORDER BY count DESC
             """
         )
-        models = store.query_df(
-            """
-            SELECT brand_key, model_raw, COUNT(*) AS count
-            FROM listings WHERE brand_key IS NOT NULL AND model_raw IS NOT NULL
-            GROUP BY brand_key, model_raw ORDER BY count DESC
-            """
-        )
-        models_by_brand: dict[str, list] = {}
-        for _, r in models.iterrows():
-            models_by_brand.setdefault(r["brand_key"], []).append(
-                {"label": r["model_raw"], "count": int(r["count"])}
+
+        # models grouped by the title-extracted label (single extraction rule
+        # shared with estimate/dashboard), cached alongside the entity vocab
+        def models_facet() -> list[dict]:
+            df = store.query_df(
+                """
+                SELECT brand_key, title, model_raw
+                FROM listings WHERE brand_key IS NOT NULL
+                """
             )
+            from icmi.core.taxonomy import add_model_label
+
+            df = add_model_label(df)
+            df = df[df["model_label"].notna()]
+            grouped = (
+                df.groupby(["brand_key", "model_label"])
+                .size()
+                .sort_values(ascending=False)
+            )
+            out: dict[str, list] = {}
+            for (brand_key, label), count in grouped.items():
+                if label:
+                    out.setdefault(brand_key, []).append(
+                        {"label": str(label), "count": int(count)}
+                    )
+            return out
+
+        sig = _entity_signature(store)
+        if _entity_cache["key"] != sig:
+            _entity_vocab(store)
+        models_cache = _entity_cache.setdefault("models_facet", {})
+        if sig not in models_cache:
+            models_cache[sig] = models_facet()
+        models_by_brand: dict[str, list] = models_cache[sig]
+
         platforms = store.query_df(
             "SELECT source_platform, COUNT(*) AS count FROM listings GROUP BY source_platform"
         )
 
-        def distinct(column: str) -> list[str]:
+        def canonical_options(field: str, column: str) -> list[dict]:
             rows = store.query_df(
-                f"SELECT DISTINCT {column} AS v FROM listings WHERE {column} IS NOT NULL ORDER BY v"
+                f"SELECT {column} AS v, COUNT(*) AS count FROM listings "
+                f"WHERE {column} IS NOT NULL GROUP BY v"
             )
-            return [str(r["v"]) for _, r in rows.iterrows() if r["v"]]
+            return canonical_facet_values(
+                field,
+                [(str(r["v"]), int(r["count"])) for _, r in rows.iterrows() if r["v"]],
+            )
 
         locations = store.query_df(
             """
@@ -237,9 +339,13 @@ def create_app(
                 }
                 for _, r in brands.iterrows()
             ],
-            "fuel": distinct("fuel_raw"),
-            "transmission": distinct("transmission_raw"),
-            "body_type": distinct("body_type_raw"),
+            "fuel": [o["label"] for o in canonical_options("fuel", "fuel_raw")],
+            "transmission": [
+                o["label"] for o in canonical_options("transmission", "transmission_raw")
+            ],
+            "body_type": [
+                o["label"] for o in canonical_options("body_type", "body_type_raw")
+            ],
             "locations": [
                 {"label": r["location_raw"], "count": int(r["count"])}
                 for _, r in locations.iterrows()
@@ -375,21 +481,27 @@ def create_app(
         mileage_max_km: int | None = None,
         location_contains: str | None = None,
     ) -> dict:
+        # canonical facet labels («اتوماتیک», «دنده‌ای») expand to the raw
+        # variants that constitute them — facets and filters stay in sync
+        fuel_values: list[str] = []
+        for f in (fuel.split(",") if fuel else []):
+            if f.strip():
+                fuel_values.extend(variants_of("fuel", f.strip()))
+        transmission_values: list[str] = []
+        for t in (transmission.split(",") if transmission else []):
+            if t.strip():
+                transmission_values.extend(variants_of("transmission", t.strip()))
+        body_values: list[str] = []
+        for b in (body_type.split(",") if body_type else []):
+            if b.strip():
+                body_values.extend(variants_of("body_type", b.strip()))
         filters = SearchFilters(
             platforms=[p.strip() for p in platforms.split(",") if p.strip()] if platforms else [],
             brands=[b.strip() for b in brands.split(",") if b.strip()] if brands else [],
             models=[m.strip() for m in models.split(",") if m.strip()] if models else [],
-            fuel=[f.strip() for f in fuel.split(",") if f.strip()] if fuel else [],
-            transmission=(
-                [t.strip() for t in transmission.split(",") if t.strip()]
-                if transmission
-                else []
-            ),
-            body_type=(
-                [b.strip() for b in body_type.split(",") if b.strip()]
-                if body_type
-                else []
-            ),
+            fuel=fuel_values,
+            transmission=transmission_values,
+            body_type=body_values,
             price_min=price_min,
             price_max=price_max,
             year_min=year_min,
@@ -442,6 +554,7 @@ def create_app(
         return {
             "query": response.query,
             "mode": mode,
+            "retrieval_mode": response.retrieval_mode,
             "total_corpus": response.total_corpus,
             "candidates_after_filters": response.candidates_after_filters,
             "total_matched": response.total_matched,
@@ -483,74 +596,7 @@ def create_app(
         schema of the sources (100% field coverage), so the guided estimate
         restricts selections to this taxonomy. Free-text fallback stays
         available in the UI."""
-        store = get_store()
-        rows = store.query_df(
-            """
-            SELECT brand_canonical AS brand, title, model_raw AS trim,
-                   year_num, mileage_km, body_type_raw, body_condition_raw,
-                   transmission_raw, fuel_raw
-            FROM listings
-            WHERE source_platform = 'bama'
-            """
-        )
-
-        def model_of(title: str) -> str | None:
-            # bama titles: «برند، مدل | …» — the model is the second
-            # comma-separated token before the pipe
-            if not title or "،" not in title:
-                return None
-            tok = title.split("،")[1].split("|")[0].strip()
-            return tok or None
-
-        models: dict[str, dict] = {}
-        trims_by_model: dict[str, dict] = {}
-        years: set[int] = set()
-        body_conditions: set[str] = set()
-        body_types: set[str] = set()
-        transmissions: set[str] = set()
-        fuels: set[str] = set()
-        for _, r in rows.iterrows():
-            brand = r["brand"]
-            model = model_of(r["title"])
-            if model:
-                m = models.setdefault(brand, {})
-                m[model] = m.get(model, 0) + 1
-                trim = r["trim"]
-                if trim:
-                    trims_by_model.setdefault((brand, model), set()).add(trim)
-            if r["year_num"] and 1330 <= r["year_num"] <= 1406:
-                years.add(int(r["year_num"]))
-            for col, bag in (
-                ("body_condition_raw", body_conditions),
-                ("body_type_raw", body_types),
-                ("transmission_raw", transmissions),
-                ("fuel_raw", fuels),
-            ):
-                v = r[col]
-                if v:
-                    bag.add(str(v))
-
-        brand_list = [
-            {
-                "brand": b,
-                "count": sum(models[b].values()),
-                "models": sorted(models[b].keys()),
-            }
-            for b in sorted(models.keys(), key=lambda b: -sum(models[b].values()))
-        ]
-        return {
-            "source": "bama",
-            "brands": brand_list,
-            "trims": {
-                f"{b}||{m}": sorted(t)
-                for (b, m), t in trims_by_model.items()
-            },
-            "years": sorted(years, reverse=True),
-            "body_conditions": sorted(body_conditions),
-            "body_types": sorted(body_types),
-            "transmissions": sorted(transmissions),
-            "fuels": sorted(fuels),
-        }
+        return build_bama_taxonomy(get_store())
 
     @app.get("/listings/{platform}/{listing_id}")
     def listing(platform: str, listing_id: str) -> dict:

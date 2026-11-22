@@ -28,3 +28,38 @@ aliases:
   mg: ام جی
   suzuki: سوزوکی
   peugeot: پژو
+  # observed unmapped variants (hamrah Latin slugs + bama parentheticals),
+  # added 2026-11-22 after the dashboard-duplicate audit — only confident
+  # mappings; genuinely unknown slugs (gakgono, bac, xtrim…) stay verbatim
+  geely: جیلی
+  lifan: لیفان
+  byd: بی وای دی
+  mitsubishi: میتسوبیشی
+  lexus: لکسوس
+  citroen: سیتروئن
+  audi: آئودی
+  volvo: ولوو
+  opel: اوپل
+  brilliance: برلیانس
+  tigard: تیگارد
+  lucano: لوکانو
+  parskhodro: پارس خودرو
+  baic: بایک
+  beijing: بیجینگ
+  haval: هاوال
+  besturn: بستون
+  bestune: بستون
+  zotye: زوتی
+  voyah: وویا
+  roewe: رویو
+  venucia: ونوسیا
+  ssangyong: سانگ یانگ
+  سانگ یانگ (KGM): سانگ یانگ
+  بی ای دبلیو (BAW): بی ای دبلیو
+  bahmangroup: بهمن
+  fardamotors: فاردا
+  cheval: شوال
+  alfaromeo: آلفا رومئو
+  chevrolet: شورولت
+  gmc: جی ام سی
+  jmc: جی ام سی

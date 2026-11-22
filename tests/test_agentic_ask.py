@@ -3,10 +3,11 @@ grounding contract, and structured payload — with a scripted mock LLM."""
 
 import json
 
+import pandas as pd
 import pytest
 
 from icmi.qa.agentic import MAX_SEARCH_CALLS, answer_agentic, parse_intent_plan
-from icmi.qa.grounded import GroundedAnswer, LLMError
+from icmi.qa.grounded import LLMError
 
 
 class MockClient:
@@ -24,8 +25,6 @@ class MockClient:
             return self.plan_json
         return self.answer
 
-
-import pandas as pd
 
 
 class FakeService:

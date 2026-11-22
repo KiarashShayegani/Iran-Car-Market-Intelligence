@@ -6,13 +6,11 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import {
-  PLATFORM_LABELS,
   fetchFacets,
   formatDateJalaliShort,
   formatNumber,
   formatToman,
 } from "@/lib/api";
-import PlatformMark from "@/components/PlatformMark";
 
 interface AnalyticsResponse {
   total: number;
@@ -38,11 +36,10 @@ interface DashboardFilters {
   year_max: string;
   fuel: string;
   transmission: string;
-  platform: string;
 }
 
 const EMPTY_FILTERS: DashboardFilters = {
-  brand: "", model: "", year_min: "", year_max: "", fuel: "", transmission: "", platform: "",
+  brand: "", model: "", year_min: "", year_max: "", fuel: "", transmission: "",
 };
 
 export default function AnalyticsPanel() {
@@ -55,7 +52,8 @@ export default function AnalyticsPanel() {
     fetchFacets().then(setFacets).catch(() => {});
   }, []);
 
-  // refetch whenever filters change (params mirror the /analytics contract)
+  // refetch whenever filters change (params mirror the /analytics contract;
+  // the dashboard runs on bama only — backend enforces the same default)
   useEffect(() => {
     const p = new URLSearchParams();
     if (filters.brand) p.set("brands", filters.brand);
@@ -64,7 +62,6 @@ export default function AnalyticsPanel() {
     if (filters.year_max) p.set("year_max", filters.year_max);
     if (filters.fuel) p.set("fuel", filters.fuel);
     if (filters.transmission) p.set("transmission", filters.transmission);
-    if (filters.platform) p.set("platforms", filters.platform);
     fetch(`${process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"}/analytics?${p}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`خطا ${r.status}`))))
       .then(setData)
@@ -105,10 +102,18 @@ export default function AnalyticsPanel() {
         <div className="card p-6 text-sm" style={{ color: "var(--danger)" }}>⚠️ {error}</div>
       )}
 
-      {/* interactive filter bar */}
+      {/* interactive filter bar — bama-only data (owner decision) */}
       <div className="card p-4">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold">فیلترهای بازار</h3>
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            فیلترهای بازار
+            <span
+              className="chip score-high !text-[10px]"
+              title="داشبورد فقط روی آگهی‌های باما محاسبه می‌شود — ساختارمندترین منبع (سال، کارکرد، برند و بدنهٔ ۱۰۰٪ ساختاریافته)"
+            >
+              داده: باما
+            </span>
+          </h3>
           {activeCount > 0 && (
             <button
               className="text-xs underline"
@@ -119,11 +124,11 @@ export default function AnalyticsPanel() {
             </button>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
           <select className="!py-1.5 !text-xs" value={filters.brand}
             onChange={(e) => setFilters((f) => ({ ...f, brand: e.target.value, model: "" }))}>
             <option value="">همهٔ برندها</option>
-            {(facets?.brands ?? []).map((b) => (
+            {(facets?.brands ?? []).filter((b) => b.count >= 30).map((b) => (
               <option key={b.key} value={b.label}>{b.label}</option>
             ))}
           </select>
@@ -154,14 +159,11 @@ export default function AnalyticsPanel() {
             <option value="">همهٔ گیربکس‌ها</option>
             {(facets?.transmission ?? []).map((g) => <option key={g} value={g}>{g}</option>)}
           </select>
-          <select className="!py-1.5 !text-xs" value={filters.platform}
-            onChange={(e) => setFilters((f) => ({ ...f, platform: e.target.value }))}>
-            <option value="">همهٔ منابع</option>
-            {Object.entries(PLATFORM_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
         </div>
+        <p className="mt-2 text-[11px]" style={{ color: "var(--muted)" }}>
+          مدل‌ها از عنوان آگهی استخراج می‌شوند (نه از کد تیپ/سال) و گزینه‌های
+          گیربکس و سوخت به‌صورت معنایی یکپارچه شده‌اند («اتومات» و «اتوماتیک» یکی‌اند).
+        </p>
       </div>
 
       {data?.insufficient && (
@@ -284,24 +286,6 @@ export default function AnalyticsPanel() {
             </p>
           </section>
 
-          <section className="card p-4">
-            <h3 className="mb-3 text-sm font-semibold">پوشش منابع</h3>
-            <div className="space-y-2">
-              {(data.by_platform ?? []).map((row) => (
-                <div key={row.platform} className="flex items-center gap-2 text-xs">
-                  <PlatformMark platform={row.platform} />
-                  <div
-                    className="h-4 rounded"
-                    style={{
-                      width: `${Math.max((row.count / Math.max(...data.by_platform.map((r) => r.count))) * 100, 4)}%`,
-                      background: "var(--gradient-brand)",
-                    }}
-                  />
-                  <span className="num" style={{ color: "var(--muted)" }}>{formatNumber(row.count)}</span>
-                </div>
-              ))}
-            </div>
-          </section>
         </>
       )}
     </div>

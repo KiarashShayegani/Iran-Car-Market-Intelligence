@@ -1,8 +1,15 @@
 """Market-analytics aggregations for the interactive dashboard.
 
-One endpoint (`/analytics`) assembles every dashboard section from filtered
-SQL aggregations — nothing is loaded into the browser to compute statistics.
-All filters are validated and parameterized; aggregation happens in SQLite.
+One endpoint (`/analytics`) assembles every dashboard sections from filtered
+aggregations — nothing is loaded into the browser to compute statistics.
+
+Source scope (owner decision 2026-11-22): the dashboard runs on BAMA ONLY —
+the most structured source (100% year/mileage/brand/body coverage). Other
+platforms stay in search/discovery. When no explicit platform filter arrives,
+bama is forced; the models filter matches the title-extracted model
+(core/taxonomy) instead of the trim-like model_raw, and transmission/fuel
+filters accept canonical facet labels (core/value_aliases) expanded back to
+raw variants.
 
 Honesty rules (owner brief): statistics describe ADVERTISEMENT counts, not
 unique vehicles (cross-platform entity resolution is future work); price
@@ -14,7 +21,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from icmi.core.taxonomy import add_model_label
+from icmi.core.value_aliases import variants_of
 from icmi.pipeline.store import CanonicalStore
+from icmi.retrieval.normalization import normalize_for_key
 
 MILEAGE_BUCKETS = [
     ("0-30k", 0, 30_000),
@@ -28,20 +38,23 @@ MILEAGE_BUCKETS = [
 @dataclass
 class AnalyticsFilters:
     brand_keys: list[str]
-    models: list[str]
+    models: list[str]  # title-extracted model labels (contains-match)
     year_min: int | None
     year_max: int | None
     year_calendar: str | None
     platforms: list[str]
-    fuel: list[str]
-    transmission: list[str]
+    fuel: list[str]  # canonical facet labels
+    transmission: list[str]  # canonical facet labels
     mileage_max_km: int | None
     price_min: int | None
     price_max: int | None
 
 
 def _where(f: AnalyticsFilters) -> tuple[str, list]:
-    """Build a WHERE clause over listings from validated filters."""
+    """Build a WHERE clause over listings from validated filters.
+
+    The models filter is NOT here — it matches the title-extracted model,
+    which only exists as a pandas derivation (see build_dashboard)."""
     clauses: list[str] = ["l.price_amount IS NOT NULL", "l.price_amount > 0"]
     params: list = []
 
@@ -52,10 +65,6 @@ def _where(f: AnalyticsFilters) -> tuple[str, list]:
             params.extend(values)
 
     add_in("brand_key", f.brand_keys)
-    if f.models:
-        marks = ",".join("?" for _ in f.models)
-        clauses.append(f"l.model_raw IN ({marks})")
-        params.extend(f.models)
     if f.year_min is not None:
         clauses.append("l.year_num >= ?")
         params.append(f.year_min)
@@ -66,8 +75,18 @@ def _where(f: AnalyticsFilters) -> tuple[str, list]:
         clauses.append("l.year_calendar = ?")
         params.append(f.year_calendar)
     add_in("source_platform", f.platforms)
-    add_in("fuel_raw", f.fuel)
-    add_in("transmission_raw", f.transmission)
+
+    def add_canonical(field: str, values: list[str]) -> None:
+        """Canonical facet label → its raw variants (filter expansion)."""
+        if not values:
+            return
+        raws: list[str] = []
+        for v in values:
+            raws.extend(variants_of(field, v))
+        add_in(f"{field}_raw", raws)
+
+    add_canonical("fuel", f.fuel)
+    add_canonical("transmission", f.transmission)
     if f.mileage_max_km is not None:
         clauses.append("l.mileage_km IS NOT NULL AND l.mileage_km <= ?")
         params.append(f.mileage_max_km)
@@ -87,18 +106,34 @@ def _pct(values: list[int], p: float) -> int | None:
     return rows[min(int(round(p * (len(rows) - 1))), len(rows) - 1)]
 
 
+def _apply_models_filter(df, models: list[str]):
+    """Contains-match on the title-extracted model (falls back to model_raw
+    inside model_label) — mirrors the estimate/search model semantics."""
+    if not models:
+        return df
+    wanted = [normalize_for_key(m) for m in models if m]
+    keys = df["model_label"].fillna("").astype(str).map(normalize_for_key)
+    mask = keys.apply(lambda k: any(w in k for w in wanted if w))
+    return df[mask]
+
+
 def build_dashboard(store: CanonicalStore, f: AnalyticsFilters) -> dict:
+    # owner decision: dashboard = bama-only (most structured source)
+    if not f.platforms:
+        f.platforms = ["bama"]
     where, params = _where(f)
 
     base = store.query_df(
         f"""
-        SELECT l.listing_key, l.source_platform, l.brand_raw, l.brand_key,
+        SELECT l.listing_key, l.source_platform, l.title, l.brand_raw, l.brand_key,
                l.brand_canonical, l.model_raw, l.year_num, l.year_calendar,
                l.mileage_km, l.price_amount, l.first_seen_at
         FROM listings l WHERE {where}
         """,
         params,
     )
+    base = add_model_label(base)
+    base = _apply_models_filter(base, f.models)
 
     total = len(base)
     if total == 0:
@@ -114,7 +149,9 @@ def build_dashboard(store: CanonicalStore, f: AnalyticsFilters) -> dict:
     mile = base[base["mileage_km"].notna()]
 
     brands = base.groupby("brand_canonical").size().sort_values(ascending=False)
-    models = base.groupby(["brand_canonical", "model_raw"]).size().sort_values(ascending=False)
+    models = base.groupby(["brand_canonical", "model_label"]).size().sort_values(
+        ascending=False
+    )
     platforms = base.groupby("source_platform").size()
     years = (
         base.dropna(subset=["year_num"])
@@ -132,10 +169,11 @@ def build_dashboard(store: CanonicalStore, f: AnalyticsFilters) -> dict:
                  "median": int(in_bucket["price_amount"].median())}
             )
 
-    # price trend per collection run (honest: run-series, not daily history)
+    # price trend per collection run (honest: run-series, not daily history) —
+    # restricted to the listings that survived the (pandas-side) model filter
     trend = store.query_df(
         f"""
-        SELECT substr(r.started_at, 1, 10) AS run_date, po.price_amount
+        SELECT po.listing_key, substr(r.started_at, 1, 10) AS run_date, po.price_amount
         FROM price_observations po
         JOIN listings l ON po.listing_key = l.listing_key
         JOIN runs r ON po.run_id = r.run_id
@@ -143,6 +181,8 @@ def build_dashboard(store: CanonicalStore, f: AnalyticsFilters) -> dict:
         """,
         params,
     )
+    if f.models:
+        trend = trend[trend["listing_key"].isin(set(base["listing_key"]))]
     price_trend = (
         trend.groupby("run_date")["price_amount"]
         .agg(count="count", median="median",
@@ -173,7 +213,7 @@ def build_dashboard(store: CanonicalStore, f: AnalyticsFilters) -> dict:
             "p25": _pct(prices, 0.25),
             "p75": _pct(prices, 0.75),
             "brands": int(base["brand_canonical"].nunique()),
-            "models": int(base.groupby(["brand_raw", "model_raw"]).ngroups),
+            "models": int(base.groupby(["brand_canonical", "model_label"]).ngroups),
             "median_mileage": (
                 int(mile["mileage_km"].median()) if len(mile) else None
             ),

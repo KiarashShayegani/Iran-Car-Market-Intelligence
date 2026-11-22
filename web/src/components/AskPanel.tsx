@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   CheckCircle2, ExternalLink, Loader2, MessageSquareText, PenLine,
-  Search as SearchIcon, Sparkles, User,
+  Search as SearchIcon, Sparkles, Trash2, User,
 } from "lucide-react";
 import AiMarkdown from "@/components/AiMarkdown";
 import VehicleImage from "@/components/VehicleImage";
@@ -21,6 +21,29 @@ import {
   toggleCompareKey,
 } from "@/lib/api";
 
+/** Latest Q&A survives navigation (no accounts/chat-history by design —
+    sessionStorage scope: this tab, cleared when the tab closes). */
+const LAST_SESSION_KEY = "icmi:ask:last";
+
+function loadLastSession(): { question: string; answer: AskApiResponse } | null {
+  try {
+    const raw = sessionStorage.getItem(LAST_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { question: string; answer: AskApiResponse };
+    return parsed?.answer?.answer && parsed?.question ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLastSession(question: string, answer: AskApiResponse) {
+  try {
+    sessionStorage.setItem(LAST_SESSION_KEY, JSON.stringify({ question, answer }));
+  } catch {
+    // storage full/unavailable — persistence is best-effort, never fatal
+  }
+}
+
 /** The real agentic pipeline order — mirrored live while loading, then
     replaced by the actual steps trace from the response. */
 const STEP_META = [
@@ -35,7 +58,22 @@ export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: Filter
   const [phase, setPhase] = useState(0); // animated step progression
   const [error, setError] = useState<string | null>(null);
   const [answer, setAnswer] = useState<AskApiResponse | null>(null);
+  const [highlighted, setHighlighted] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // restore the latest Q&A when the user returns to this page
+  useEffect(() => {
+    const restored = loadLastSession();
+    if (restored) {
+      setQuestion("");
+      setAnswer(restored.answer);
+    }
+  }, []);
+
+  useEffect(() => () => {
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+  }, []);
 
   const submit = async () => {
     if (!question.trim()) return;
@@ -48,12 +86,34 @@ export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: Filter
       setPhase((p) => Math.min(p + 1, STEP_META.length - 1));
     }, 2200);
     try {
-      setAnswer(await askQuestion(question.trim(), filters));
+      const response = await askQuestion(question.trim(), filters);
+      setAnswer(response);
+      saveLastSession(question.trim(), response);
     } catch (e) {
       setError(e instanceof Error ? e.message : "خطای ناشناخته");
     } finally {
       if (timerRef.current) clearInterval(timerRef.current);
       setLoading(false);
+    }
+  };
+
+  const clearConversation = () => {
+    try {
+      sessionStorage.removeItem(LAST_SESSION_KEY);
+    } catch {
+      // ignore storage errors — the UI reset below is what matters
+    }
+    setAnswer(null);
+    setError(null);
+  };
+
+  const scrollToCitation = (n: number) => {
+    const el = document.getElementById(`cite-row-${n}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlighted(n);
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+      highlightTimer.current = setTimeout(() => setHighlighted(null), 2600);
     }
   };
 
@@ -163,6 +223,17 @@ export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: Filter
                 {answer && !answer.insufficient_evidence && (
                   <span className="chip score-high !text-[10px]">پاسخ مبتنی بر شواهد</span>
                 )}
+                {answer && !loading && (
+                  <button
+                    onClick={clearConversation}
+                    className="ml-auto inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md hover:bg-slate-100"
+                    style={{ color: "var(--muted)" }}
+                    title="پاک‌کردن گفتگوی فعلی (سؤال بعدی تازه شروع می‌شود)"
+                  >
+                    <Trash2 size={12} />
+                    گفتگوی جدید
+                  </button>
+                )}
               </div>
 
               {loading ? (
@@ -233,7 +304,11 @@ export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: Filter
                     )}
 
                     <div className="card p-4 answer-text text-sm">
-                      <AiMarkdown content={answer.answer} />
+                      <AiMarkdown
+                        content={answer.answer}
+                        citations={answer.citations}
+                        onCitationClick={scrollToCitation}
+                      />
                     </div>
 
                     {answer.citations.length > 0 && (
@@ -243,11 +318,16 @@ export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: Filter
                           style={{ color: "var(--muted)" }}
                         >
                           <MessageSquareText size={13} />
-                          آگهی‌های پیشنهادی برای پرسش شما:
+                          آگهی‌های پیشنهادی برای پرسش شما
+                          <span style={{ fontWeight: 400 }}>
+                            — روی شماره‌ها در پاسخ کلیک کنید تا اینجا هایلایت شوند
+                          </span>
                         </p>
                         <div className="space-y-2">
                           {answer.citations.map((c) => (
-                            <MiniResultRow key={`${c.index}-${c.listing_key}`} citation={c} />
+                            <div key={`${c.index}-${c.listing_key}`} id={`cite-row-${c.index}`}>
+                              <MiniResultRow citation={c} highlighted={highlighted === c.index} />
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -291,8 +371,11 @@ export default function AskPanel({ filters = EMPTY_FILTERS }: { filters?: Filter
   );
 }
 
-/** Compact in-chat result row — minimal, integrated, not a full ad card. */
-function MiniResultRow({ citation }: { citation: Citation }) {
+/** Compact in-chat result row — minimal, integrated, not a full ad card.
+    Flashes with an accent ring when its citation chip is clicked. */
+function MiniResultRow(
+  { citation, highlighted = false }: { citation: Citation; highlighted?: boolean },
+) {
   const [platform, id] = citation.listing_key.split(":");
   const [compareKeys, setCompareKeys] = useState<string[]>(getCompareKeys());
   const inCompare = compareKeys.includes(citation.listing_key);
@@ -305,7 +388,14 @@ function MiniResultRow({ citation }: { citation: Citation }) {
   };
 
   return (
-    <div className="card p-2.5 flex items-center gap-3 hover:shadow-md transition-shadow">
+    <div
+      className="card p-2.5 flex items-center gap-3 hover:shadow-md transition-all"
+      style={
+        highlighted
+          ? { outline: "2px solid var(--secondary)", outlineOffset: "2px", background: "var(--teal-soft)" }
+          : undefined
+      }
+    >
       <span
         className="shrink-0 flex items-center justify-center rounded-lg font-bold num"
         style={{

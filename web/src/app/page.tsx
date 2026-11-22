@@ -49,7 +49,7 @@ function HomeContent() {
       >
         <h1 className="text-2xl font-extrabold tracking-tight">بازار هوشمند خودرو ایران</h1>
         <p className="mt-2 text-sm" style={{ color: "rgba(255,255,255,0.82)" }}>
-          جستجوی معنایی آگهی‌ها از باما، شیپور و همراه‌مکانیک — با فیلترهای
+          جستجوی هوشمند آگهی‌ها از باما، دیوار، شیپور و همراه‌مکانیک — با فیلترهای
           دقیق و ارجاع به آگهی اصلی
         </p>
         <div className="mx-auto mt-4 flex max-w-xl gap-2">

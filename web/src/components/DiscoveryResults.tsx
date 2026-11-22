@@ -101,7 +101,16 @@ export default function DiscoveryResults() {
             ? "ترکیبی (فیلتر + معنایی)"
             : results.mode === "browse"
               ? "مرور با فیلتر"
-              : "معنایی"}{" "}
+              : "معنایی"}
+          {results.retrieval_mode && results.retrieval_mode !== "semantic" && (
+            <span className="chip score-mid !text-[10px] mx-1">
+              {results.retrieval_mode.includes("entity")
+                ? "تشخیص خودکار برند/مدل"
+                : results.retrieval_mode.includes("keyword")
+                  ? "تطبیق کلیدواژه + معنایی"
+                  : results.retrieval_mode}
+            </span>
+          )}{" "}
           · کل داده:{" "}
           <span className="num">{results.total_corpus}</span> · پس از فیلتر:{" "}
           <span className="num">{results.candidates_after_filters}</span> · یافت‌شده:{" "}

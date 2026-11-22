@@ -78,6 +78,8 @@ export interface FacetsApiResponse {
 export interface SearchApiResponse {
   query: string;
   mode: "semantic" | "hybrid" | "browse";
+  /** retrieval pipeline label: semantic | keyword+semantic fusion | entity-steered · … */
+  retrieval_mode?: string;
   total_corpus: number;
   candidates_after_filters: number;
   total_matched: number;
