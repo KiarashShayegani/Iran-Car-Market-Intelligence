@@ -247,31 +247,37 @@ def create_app(
         return {"listings": [_listing_card(row) for row in picked]}
 
     @app.get("/facets")
-    def facets() -> dict:
+    def facets(platform: str | None = None) -> dict:
         """Database-driven filter facets: brands with nested models, spec
         values, top locations, platform counts, freshness. Never invents
         options that are not present in the data. Spec values are rolled up
         into canonical groups («اتومات»+«اتوماتیک» → «اتوماتیک») so the
         dropdowns show one honest option per concept; models use the
         title-extracted model label (bama) instead of the trim-like
-        model_raw."""
+        model_raw. `platform=bama` scopes brand/model facets to one source
+        (the bama-only dashboard must not offer brands the page can't
+        filter by)."""
+        scope = "AND source_platform = ?" if platform else ""
+        params: tuple = (platform,) if platform else ()
         store = get_store()
         brands = store.query_df(
-            """
+            f"""
             SELECT brand_key, brand_canonical AS label, COUNT(*) AS count
-            FROM listings WHERE brand_key IS NOT NULL
+            FROM listings WHERE brand_key IS NOT NULL {scope}
             GROUP BY brand_key ORDER BY count DESC
-            """
+            """,
+            params,
         )
 
         # models grouped by the title-extracted label (single extraction rule
         # shared with estimate/dashboard), cached alongside the entity vocab
         def models_facet() -> list[dict]:
             df = store.query_df(
-                """
+                f"""
                 SELECT brand_key, title, model_raw
-                FROM listings WHERE brand_key IS NOT NULL
-                """
+                FROM listings WHERE brand_key IS NOT NULL {scope}
+                """,
+                params,
             )
             from icmi.core.taxonomy import add_model_label
 
@@ -294,9 +300,10 @@ def create_app(
         if _entity_cache["key"] != sig:
             _entity_vocab(store)
         models_cache = _entity_cache.setdefault("models_facet", {})
-        if sig not in models_cache:
-            models_cache[sig] = models_facet()
-        models_by_brand: dict[str, list] = models_cache[sig]
+        cache_key = (sig, platform or "")
+        if cache_key not in models_cache:
+            models_cache[cache_key] = models_facet()
+        models_by_brand: dict[str, list] = models_cache[cache_key]
 
         platforms = store.query_df(
             "SELECT source_platform, COUNT(*) AS count FROM listings GROUP BY source_platform"
@@ -568,6 +575,7 @@ def create_app(
     def estimate(
         brand: str = Query(min_length=1),
         model: str | None = None,
+        trim: str | None = None,
         year: str | None = None,
         mileage_km: int | None = None,
         source_platform: str | None = None,
@@ -578,6 +586,7 @@ def create_app(
             get_store(),
             brand=brand,
             model=model,
+            trim=trim,
             year=year,
             mileage_km=mileage_km,
             source_platform=source_platform,

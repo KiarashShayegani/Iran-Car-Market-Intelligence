@@ -295,8 +295,9 @@ export async function fetchLatest(limit = 8): Promise<LatestApiResponse> {
   return res.json();
 }
 
-export async function fetchFacets(): Promise<FacetsApiResponse> {
-  const res = await fetch(`${API_BASE}/facets`);
+export async function fetchFacets(platform?: string): Promise<FacetsApiResponse> {
+  const qs = platform ? `?platform=${encodeURIComponent(platform)}` : "";
+  const res = await fetch(`${API_BASE}/facets${qs}`);
   if (!res.ok) throw new Error(`خطا (${res.status})`);
   return res.json();
 }

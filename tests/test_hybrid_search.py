@@ -11,7 +11,7 @@ import re
 import numpy as np
 import pytest
 
-from icmi.core.taxonomy import extract_model_from_title
+from icmi.core.taxonomy import clean_trim_label, extract_model_from_title
 from icmi.core.value_aliases import (
     canonical_facet_values,
     canonical_value,
@@ -100,7 +100,7 @@ def test_title_model_extraction():
 
 # --- search service fusion + diversity ----------------------------------------
 
-def _service_from_rows(metadata: list[dict]) -> SearchService:
+def _service_from_rows(metadata: list[dict], vocab: dict | None = VOCAB) -> SearchService:
     """Build a SearchService over hand-made metadata rows (offline)."""
     import pandas as pd
 
@@ -141,7 +141,7 @@ def _service_from_rows(metadata: list[dict]) -> SearchService:
     )
     return SearchService(
         vectors, df, encoder,
-        entity_vocab=VOCAB,
+        entity_vocab=vocab,
         brand_canonicals={"بنز", "ام جی", "شاهین", "پژو"},
     )
 
@@ -325,5 +325,90 @@ def test_dashboard_transmission_canonical_expansion(tmp_path, monkeypatch):
             mileage_max_km=None, price_min=None, price_max=None,
         ))
         assert result["total"] == 3  # d1(اتومات) + d2(اتوماتیک) + p1(اتومات)
+    finally:
+        store.close()
+
+
+# --- filter audit fixes (owner round 2026-11-22, second pass) ----------------
+
+def test_models_filter_matches_extracted_model_via_vocab():
+    """Facets list clean title-extracted models; the filter must match them
+    even though bama's model_raw is a year|trim composite with no model in
+    it (regression from the facet cleanup: «207» matched nothing)."""
+    rows = [
+        {"listing_key": "bama:207a", "brand_key": "پژو", "brand_raw": "پژو",
+         "model_raw": "1404 | اتوماتیک توربو",
+         "normalized_text": "پژو 207 اتوماتیک", "text": "پژو 207"},
+        {"listing_key": "bama:other", "brand_key": "پژو", "brand_raw": "پژو",
+         "model_raw": "1402 | دنده ای",
+         "normalized_text": "پژو پارس دنده ای", "text": "پژو پارس"},
+    ]
+    vocab = {"207": {"label": "207", "brands": {"پژو"},
+                     "listing_keys": {"bama:207a"}}}
+    service = _service_from_rows(rows, vocab=vocab)
+    filters = SearchFilters(models=["207"])
+    response = service.search("", filters, top_k=10)
+    assert [r.listing_key for r in response.results] == ["bama:207a"]
+
+
+def test_models_filter_falls_back_to_model_raw_without_vocab():
+    rows = [
+        {"listing_key": "sheypoor:x", "brand_key": "پژو", "brand_raw": "پژو",
+         "model_raw": "206 sd v20",
+         "normalized_text": "پژو 206 sd", "text": "پژو 206 sd"},
+        {"listing_key": "sheypoor:y", "brand_key": "پژو", "brand_raw": "پژو",
+         "model_raw": "پارس",
+         "normalized_text": "پژو پارس", "text": "پژو پارس"},
+    ]
+    service = _service_from_rows(rows, vocab=None)
+    assert not service.entity_vocab  # built without a vocabulary
+    response = service.search("", SearchFilters(models=["206"]), top_k=10)
+    assert [r.listing_key for r in response.results] == ["sheypoor:x"]
+
+
+def test_trim_label_strips_year_prefix():
+    """Estimate trim options must not embed the model year — the year is a
+    separate field («1405 | دنده ای TU5P» → «دنده ای TU5P»; a bare «1402»
+    is not a trim at all)."""
+    assert clean_trim_label("1405 | دنده ای TU5P") == "دنده ای TU5P"
+    assert clean_trim_label("2026 | 2.0 لیتر") == "2.0 لیتر"
+    assert clean_trim_label("1402 ") is None
+    assert clean_trim_label("اتوماتیک توربو") == "اتوماتیک توربو"
+    assert clean_trim_label(None) is None
+
+
+def test_dashboard_year_filter_normalizes_gregorian(tmp_path, monkeypatch):
+    """«از سال 1400» must not silently exclude imported cars whose source
+    year is Gregorian (2024 ≈ 1403) — the filter matches the chart's
+    model-year normalization."""
+    from icmi.analytics.dashboard import AnalyticsFilters, build_dashboard
+
+    monkeypatch.setenv("ICMI_DATA_DIR", str(tmp_path / "data"))
+    from icmi.core.records import CanonicalRecord, RawPayloadRef, utc_now
+    from icmi.pipeline.store import CanonicalStore
+
+    store = CanonicalStore()
+    try:
+        for key, year_raw, _year_num, _cal, price in (
+            ("g1", 2024, 2024, "gregorian", 900_000_000),
+            ("s1", 1404, 1404, "shamsi", 800_000_000),
+            ("s0", 1395, 1395, "shamsi", 700_000_000),
+        ):
+            store.upsert_listings([CanonicalRecord(
+                source_platform="bama", source_listing_id=key,
+                original_url=f"https://example.com/{key}",
+                title=f"تست، {key}", brand_raw="تست", year_raw=year_raw,
+                price_raw=str(price), scraped_at=utc_now(),
+                extraction_version="test-v1",
+                raw_payload_ref=RawPayloadRef(
+                    run_id="r", platform="bama", file="records.jsonl", key=key
+                ),
+            )], f"run-{key}")
+        result = build_dashboard(store, AnalyticsFilters(
+            brand_keys=[], models=[], year_min=1400, year_max=None,
+            year_calendar=None, platforms=[], fuel=[], transmission=[],
+            mileage_max_km=None, price_min=None, price_max=None,
+        ))
+        assert result["total"] == 2  # g1 (2024≈1403) + s1 (1404), not s0
     finally:
         store.close()

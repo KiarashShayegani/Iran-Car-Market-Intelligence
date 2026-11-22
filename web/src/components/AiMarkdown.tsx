@@ -14,20 +14,26 @@ import {
 const CITATION_HREF = /^#cite-(\d+)$/;
 
 /** Turn bare [n] reference markers in AI text into interactive markdown
-    links — rendered as numbered chips by the `a` override below. Only
-    markers with a matching citation are converted; `(?!\()` keeps markdown
-    links like [1](http…) untouched. */
-function linkifyCitations(content: string, total: number): string {
-  if (total <= 0) return content;
-  // Persian digits → western so [۱] also matches
-  const western = content.replace(
-    /[۰-۹]/g,
-    (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))
-  );
+    links — rendered as numbered chips by the `a` override below.
+
+    Validity is decided by the SET of actual citation indexes, never by
+    count: the agentic flow may drop evidence, leaving non-contiguous
+    indexes ([1][2][3][5] with four citations) — a `n <= length` check
+    wrongly rejected the real [5]. Handles adjacent ([3][5]) and grouped
+    ([3, 5] / [3، 5]) markers, and normalizes Persian/Arabic digits first.
+    `(?!\()` keeps markdown links like [1](http…) untouched. */
+function linkifyCitations(content: string, validIndexes: Set<number>): string {
+  if (validIndexes.size === 0) return content;
+  const western = content
+    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
   return western.replace(
-    /\[(\d{1,2})\](?!\()/g,
-    (m, n: string) =>
-      Number(n) >= 1 && Number(n) <= total ? `[${n}](#cite-${n})` : m
+    /\[(\d{1,2}(?:\s*[،,]\s*\d{1,2})*)\](?!\()/g,
+    (marker: string, group: string) => {
+      const nums = group.split(/\s*[،,]\s*/).map(Number);
+      if (!nums.every((n) => validIndexes.has(n))) return marker;
+      return nums.map((n) => `[${n}](#cite-${n})`).join("");
+    },
   );
 }
 
@@ -46,6 +52,7 @@ export default function AiMarkdown({
   onCitationClick?: (n: number) => void;
 }) {
   const byIndex = new Map((citations ?? []).map((c) => [c.index, c]));
+  const validIndexes = new Set((citations ?? []).map((c) => c.index));
 
   return (
     <div className="ai-markdown text-sm prose-sm">
@@ -106,7 +113,7 @@ export default function AiMarkdown({
           },
         }}
       >
-        {linkifyCitations(content, citations?.length ?? 0)}
+        {linkifyCitations(content, validIndexes)}
       </ReactMarkdown>
     </div>
   );

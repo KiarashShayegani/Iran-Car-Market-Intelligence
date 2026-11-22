@@ -13,10 +13,25 @@ from the data. Raw titles stay verbatim in the store.
 
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 
 from icmi.pipeline.store import CanonicalStore
 from icmi.retrieval.normalization import normalize_for_key
+
+# bama trim composites open with the model year («1405 | دنده ای TU5P») —
+# the year is already a separate field, so the trim label drops the prefix
+_YEAR_PREFIX_RE = re.compile(r"^(1[3-5]\d{2}|20\d{2})\s*[|،,-]?\s*")
+
+
+def clean_trim_label(trim: str | None) -> str | None:
+    """Trim label without its year prefix; a bare year («1402») is NOT a
+    trim — returns None rather than an empty label."""
+    if not trim:
+        return None
+    cleaned = _YEAR_PREFIX_RE.sub("", str(trim).strip()).strip(" |،-–")
+    return cleaned or None
 
 
 def extract_model_from_title(title: str | None) -> str | None:
@@ -124,7 +139,7 @@ def build_bama_taxonomy(store: CanonicalStore) -> dict:
         if brand and model:
             m = models.setdefault(brand, {})
             m[model] = m.get(model, 0) + 1
-            trim = r["model_raw"]  # bama's trim/variant composite
+            trim = clean_trim_label(r["model_raw"])  # year prefix dropped
             if trim:
                 trims_by_model.setdefault((brand, model), set()).add(trim)
         if r["year_num"] and 1330 <= r["year_num"] <= 1406:

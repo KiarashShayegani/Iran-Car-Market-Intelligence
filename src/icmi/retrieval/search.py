@@ -159,23 +159,14 @@ class SearchResponse:
 
 
 def _apply_filters(metadata: pd.DataFrame, filters: SearchFilters) -> pd.DataFrame:
-    """Pre-ranking filter pass over the ENTIRE corpus metadata."""
+    """Pre-ranking filter pass over the ENTIRE corpus metadata (the models
+    filter is applied separately — it needs the entity vocabulary)."""
     mask = pd.Series(True, index=metadata.index)
     if filters.platforms:
         mask &= metadata["source_platform"].isin(filters.platforms)
     if filters.brands:
         wanted = {normalize_for_key(b) for b in filters.brands}
         mask &= metadata["brand_key"].isin(wanted)
-    if filters.models:
-        # contains-match on the normalized raw model: a user/agentic model
-        # reference ("206") must match every trim variant in the corpus
-        # ("206 sd v20", "206 (تیپ2)") — model_key is a composite key
-        # (year-prefixed), so exact/prefix matching on it fails.
-        wanted = [normalize_for_key(m) for m in filters.models if m]
-        mask &= metadata["model_raw"].apply(
-            lambda raw: any(w in normalize_for_key(str(raw)) for w in wanted if w)
-            if raw is not None else False
-        )
     if filters.price_min is not None:
         mask &= metadata["price_amount"].notna() & (metadata["price_amount"] >= filters.price_min)
     if filters.price_max is not None:
@@ -371,6 +362,30 @@ class SearchService:
         self.entity_vocab = entity_vocab or {}
         self.brand_canonicals = brand_canonicals or set()
 
+    def _models_mask(self, df: pd.DataFrame, models: list[str]) -> pd.Series:
+        """Model-filter matching that mirrors the (clean) facet labels.
+
+        Facets list the title-extracted model; bama rows carry that model in
+        the TITLE, not in model_raw (a year|trim composite) — so raw-model
+        contains-matching alone would return almost nothing for bama. The
+        injected entity vocabulary provides model → listing_keys membership;
+        the model_raw contains-match stays as the fallback for services
+        built without a vocabulary (tests) and for non-bama platforms."""
+        wanted = [normalize_for_key(m) for m in models if m]
+        if not wanted:
+            return pd.Series(True, index=df.index)
+        vocab_keys: set[str] = set()
+        for key, entry in self.entity_vocab.items():
+            if any(w and (w in key or key in w) for w in wanted):
+                vocab_keys.update(entry["listing_keys"])
+        raw_mask = df["model_raw"].apply(
+            lambda raw: any(w in normalize_for_key(str(raw)) for w in wanted)
+            if raw is not None else False
+        )
+        if vocab_keys:
+            return raw_mask | df["listing_key"].isin(vocab_keys)
+        return raw_mask
+
     def search(
         self,
         query: str,
@@ -392,6 +407,8 @@ class SearchService:
             if not filters.is_empty()
             else self.metadata
         )
+        if filters.models:
+            filtered = filtered[self._models_mask(filtered, filters.models)]
         subset_positions = filtered.index.to_numpy()
         total_matched = len(subset_positions)
 

@@ -68,17 +68,21 @@ def estimate_market_range(
     max_comparables: int = 8,
     trim_outliers: bool = False,
     source_platform: str | None = None,
+    trim: str | None = None,
 ) -> EstimateResult:
     """Estimate the observed market range for a vehicle description.
 
     All criteria are AND-ed; with no model given, the whole brand is the pool.
     `source_platform` restricts the comparable pool to one source (the
-    Bama-structured estimate uses source_platform="bama").
+    Bama-structured estimate uses source_platform="bama"). `trim` narrows
+    bama pools further via contains-match on model_raw (the trim composite
+    «1405 | دنده ای TU5P» carries the real trim after its year prefix).
     """
     brand_key = normalize_for_key(brand)
     if not brand_key:
         raise ValueError("brand is required")
     model_key = normalize_for_key(model) if model and model.strip() else None
+    trim_key = normalize_for_key(trim) if trim and trim.strip() else None
     year_num = normalize_year(year)
     calendar = None
     if year_num is not None:
@@ -114,6 +118,12 @@ def estimate_market_range(
         # model references from the agentic/guided flows.
         pool = pool[pool["title"].map(
             lambda v: bool(v) and model_key in normalize_for_key(str(v))
+        )]
+    if trim_key:
+        # the trim composite contains the real trim after its year prefix —
+        # contains-match survives both («1405 | دنده ای TU5P» ⊃ «دنده ای tu5p»)
+        pool = pool[pool["model_raw"].map(
+            lambda v: bool(v) and trim_key in normalize_for_key(str(v))
         )]
 
     if calendar:

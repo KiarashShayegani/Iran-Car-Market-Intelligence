@@ -49,7 +49,8 @@ export default function AnalyticsPanel() {
   const [facets, setFacets] = useState<Awaited<ReturnType<typeof fetchFacets>> | null>(null);
 
   useEffect(() => {
-    fetchFacets().then(setFacets).catch(() => {});
+    // bama-scoped facets: the dashboard can only filter what bama offers
+    fetchFacets("bama").then(setFacets).catch(() => {});
   }, []);
 
   // refetch whenever filters change (params mirror the /analytics contract;
@@ -128,7 +129,7 @@ export default function AnalyticsPanel() {
           <select className="!py-1.5 !text-xs" value={filters.brand}
             onChange={(e) => setFilters((f) => ({ ...f, brand: e.target.value, model: "" }))}>
             <option value="">همهٔ برندها</option>
-            {(facets?.brands ?? []).filter((b) => b.count >= 30).map((b) => (
+            {(facets?.brands ?? []).map((b) => (
               <option key={b.key} value={b.label}>{b.label}</option>
             ))}
           </select>

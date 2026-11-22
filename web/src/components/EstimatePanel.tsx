@@ -86,6 +86,7 @@ export default function EstimatePanel({ onOpenDetail }: { onOpenDetail?: (k: str
     try {
       const p = new URLSearchParams({ brand: brand.trim(), source_platform: "bama" });
       if (model.trim()) p.set("model", model.trim());
+      if (trim.trim()) p.set("trim", trim.trim());
       if (year.trim()) p.set("year", year.trim());
       if (mileage.trim()) p.set("mileage_km", mileage.trim());
       if (trimOutliers) p.set("trim_outliers", "true");

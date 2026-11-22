@@ -50,6 +50,16 @@ class AnalyticsFilters:
     price_max: int | None
 
 
+# the dashboard's year chart normalizes Gregorian model-years to Shamsi
+# (year-621 approximation, noted on the chart) — the year FILTER must match
+# that semantics, otherwise «از سال 1400» silently excludes every imported
+# car whose source year is Gregorian (2024/2025/2026 ≈ 1403-1405)
+_YEAR_SHAMSI_EXPR = (
+    "CASE WHEN l.year_calendar = 'gregorian' THEN l.year_num - 621 "
+    "ELSE l.year_num END"
+)
+
+
 def _where(f: AnalyticsFilters) -> tuple[str, list]:
     """Build a WHERE clause over listings from validated filters.
 
@@ -66,10 +76,10 @@ def _where(f: AnalyticsFilters) -> tuple[str, list]:
 
     add_in("brand_key", f.brand_keys)
     if f.year_min is not None:
-        clauses.append("l.year_num >= ?")
+        clauses.append(f"{_YEAR_SHAMSI_EXPR} >= ?")
         params.append(f.year_min)
     if f.year_max is not None:
-        clauses.append("l.year_num <= ?")
+        clauses.append(f"{_YEAR_SHAMSI_EXPR} <= ?")
         params.append(f.year_max)
     if f.year_calendar:
         clauses.append("l.year_calendar = ?")
