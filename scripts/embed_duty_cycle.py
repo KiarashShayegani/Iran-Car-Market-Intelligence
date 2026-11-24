@@ -57,6 +57,22 @@ def progress() -> tuple[int, int]:
     return indexed, total
 
 
+def refresh_documents() -> None:
+    """Regenerate data/index/documents.jsonl from the live store.
+
+    build_index.py embeds straight from the canonical store, so
+    documents.jsonl is a side artifact — if it is stale (new runs banked
+    since the last build), the total-vs-indexed progress check would be
+    wrong and the duty cycle would silently no-op. Refreshing first makes
+    the target reflect the data that actually needs embedding."""
+    import sys
+
+    subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "build_documents.py")],
+        cwd=REPO, check=False,
+    )
+
+
 def wait_cooldown() -> None:
     while True:
         t = package_temp()
@@ -72,6 +88,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     from icmi.ops.journal import journal_event
+
+    # target must reflect the live store, not a stale documents.jsonl
+    refresh_documents()
+    journal_event("embedding", "documents_refreshed")
 
     indexed, total = progress()
     print(f"duty-cycle embedding: {indexed}/{total} chunks indexed at start")
