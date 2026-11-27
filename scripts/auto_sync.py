@@ -72,9 +72,12 @@ def _run(args: argparse.Namespace) -> int:
 
     started = journal_event("sync", "auto_sync_started", dry_run=args.dry_run)
 
-    # 1. import everything pending (chronological, ledger-deduplicated)
+    # 1. import everything pending (chronological, ledger-deduplicated).
+    # --dry-run maps to a read-only --check (report pending, import nothing);
+    # sync_actions_artifact.py requires an action flag, so bare --dry-run fails
+    # its "one of … is required" guard.
     cmd = [sys.executable, str(script / "sync_actions_artifact.py")]
-    cmd.append("--dry-run" if args.dry_run else "--pending")
+    cmd.append("--check" if args.dry_run else "--pending")
     result = subprocess.run(cmd, capture_output=True, text=True)
     tail = "\n".join((result.stdout or result.stderr).strip().splitlines()[-12:])
     print(tail)
