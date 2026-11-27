@@ -29,7 +29,7 @@ import re
 import shutil
 import tarfile
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 _RUN_DATE_RE = re.compile(r"^(\d{8})T(\d{6})")
@@ -39,13 +39,13 @@ def _run_datetime(run_dir: Path) -> datetime | None:
     m = _RUN_DATE_RE.match(run_dir.name)
     if m:
         try:
-            return datetime.strptime(
-                f"{m.group(1)}{m.group(2)}", "%Y%m%d%H%M%S"
-            ).replace(tzinfo=timezone.utc)
+            naive = datetime.strptime(f"{m.group(1)}{m.group(2)}", "%Y%m%d%H%M%S")
+            return naive.replace(tzinfo=UTC)
         except ValueError:
             return None
     # fallback: directory modification time
-    return datetime.fromtimestamp(run_dir.stat().st_mtime, tz=timezone.utc)
+    mtime = run_dir.stat().st_mtime
+    return datetime.fromtimestamp(mtime, tz=UTC)
 
 
 def _dir_size(path: Path) -> int:
@@ -70,8 +70,9 @@ def main() -> int:
         print("no data/raw directory — nothing to prune")
         return 0
 
-    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=args.min_age_days)
-    now = time.time()
+    cutoff = datetime.now(tz=UTC) - timedelta(
+        days=args.min_age_days
+    )
 
     candidates: list[tuple[Path, datetime]] = []
     total_old, total_recent = 0, 0
@@ -105,7 +106,7 @@ def main() -> int:
     saved_bytes = 0
     archive_root.mkdir(parents=True, exist_ok=True)
     done = 0
-    for run_dir, run_dt in candidates:
+    for run_dir, _run_dt in candidates:
         if args.delete:
             shutil.rmtree(run_dir)
             saved_bytes += _dir_size(run_dir) if run_dir.exists() else 0

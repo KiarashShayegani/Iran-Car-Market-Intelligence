@@ -281,12 +281,16 @@ sources:
         params: {city_ids: ["1"], category: light, sort: sort_date}
     field_support:
       - source_listing_id
+      - original_url       # constructed from the token: divar.ir/v/<token>
       - title
       - price_raw
       - location_raw
+      - mileage_raw        # top chip text («۳۰۰,۰۰۰ کیلومتر» / «صفر کیلومتر»)
       - image_urls
-      - source_published_at
-      - description      # not supported at list level — detail enrichment upstream
+      # NOT supported at list level (detail enrichment upstream):
+      # description, brand/model/trim/year, source_published_at — the top
+      # chip is mileage TEXT, not a date (previously mislabeled as
+      # source_published_at); the SEO posting date lives on the SSR page.
     notes: >-
       Pattern fully decoded 2026-11-20 (browser capture + probes; see
       docs/internal/DIVAR_INVESTIGATION.md). POST body: city_ids +

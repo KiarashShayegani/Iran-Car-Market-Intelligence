@@ -11,9 +11,11 @@ see docs/internal/DIVAR_INVESTIGATION.md):
   unique tokens, zero dupes/missing).
 
 List rows are display-level (title, price TEXT «۳,۲۳۰,۰۰۰,۰۰۰ تومان»,
-location text, token, image). Structured year/mileage/brand-model require the
-per-post SSR page (divar.ir/v/<token>) — detail enrichment is a separate
-upstream step, NOT part of this list-only prototype.
+location text, MILEAGE text on the top chip «۳۰۰,۰۰۰ کیلومتر» / «صفر
+کیلومتر», image, token → public URL). Structured brand/model/trim/year/
+description require the per-post SSR page (divar.ir/v/<token>) — detail
+enrichment is a separate upstream step, NOT part of this list-only
+prototype.
 
 The response uses widget envelopes: list_widgets[] with widget_type ==
 "POST_ROW" carry a data node per ad.
@@ -34,7 +36,6 @@ from tenacity import (
 
 from icmi.collectors.base import BaseCollector, TransientHTTPError
 from icmi.core.records import CanonicalRecord, RawPayloadRef, utc_now
-from icmi.pipeline.normalize import normalize_price_amount
 
 
 def _nonempty(value: Any) -> bool:
@@ -134,9 +135,11 @@ class DivarCollector(BaseCollector):
 
     def parse_listing(self, ad: dict, payload_ref: RawPayloadRef) -> CanonicalRecord | None:
         errors: dict[str, str] = {}
+        token = str(ad.get("token") or "")
         record = CanonicalRecord(
             source_platform=self.source_key,
-            source_listing_id=str(ad.get("token")),
+            source_listing_id=token,
+            original_url=f"https://divar.ir/v/{token}" if token else None,
             scraped_at=utc_now(),
             extraction_version=self.pipeline.extraction_version,
             raw_payload_ref=payload_ref,
@@ -148,25 +151,45 @@ class DivarCollector(BaseCollector):
             except Exception as exc:  # noqa: BLE001 — parser bugs are extraction failures
                 errors[field] = f"{type(exc).__name__}: {exc}"
 
-        # list rows are display-level: no structured year/mileage/brand —
-        # those require the per-post SSR page (detail enrichment, separate
+        # list rows carry: title, price TEXT, location, image, and MILEAGE
+        # text (the top chip «۳۰۰,۰۰۰ کیلومتر» / «صفر کیلومتر»).
+        # brand/model/trim/year/description are NOT in the list payload —
+        # they require the per-post SSR page (detail enrichment, separate
         # upstream step). Honest missing over fabricated values.
         set_field("title", lambda: ad.get("title"))
         price_text = ad.get("middle_description_text")
         set_field("price_raw", lambda: price_text if _nonempty(price_text) else None)
-        set_field("price_amount", lambda: normalize_price_amount(price_text)
-                  if _nonempty(price_text) else None)
+        # NOTE: price_amount is derived downstream (store normalizes price_raw);
+        # CanonicalRecord itself carries only price_raw — do not set it here.
         set_field("location_raw", lambda: ad.get("bottom_description_text"))
-        set_field("source_published_at", lambda: ad.get("top_description_text"))
+
+        # mileage from the top chip — only when it actually is a mileage
+        # text (other layouts may put condition text there; never fabricate)
+        top_text = str(ad.get("top_description_text") or "").strip()
+
+        def _mileage_raw():
+            if top_text and ("کیلومتر" in top_text or top_text == "صفر"):
+                return top_text
+            return None
+
+        set_field("mileage_raw", _mileage_raw)
+
         set_field("image_count", lambda: ad.get("image_count"))
         image = ad.get("image_url")
         set_field("image_urls", lambda: [image] if _nonempty(image) else [])
-        # trust flag (نردبان شده / پله شده) — Divar-provided, not verified by us
+        # trust/boost flags (نردبان شده / پله شده) — Divar-provided, not
+        # verified by us. NOTE: source_published_at stays None — list rows
+        # carry no posting date (the SEO date lives on the SSR page).
+        def _top_tag():
+            tag = ad.get("image_top_left_tag") or {}
+            return tag.get("text") if isinstance(tag, dict) else None
+
         set_field(
             "source_attributes",
             lambda: {
                 "top_description_text": ad.get("top_description_text"),
                 "red_text": ad.get("red_text"),
+                "image_top_left_tag": _top_tag(),
                 "has_chat": ad.get("has_chat"),
                 "layout_type": ad.get("layout_type"),
                 "widget_envelope": "POST_ROW",
